@@ -1,0 +1,56 @@
+[
+  {
+    "id": "physics",
+    "name": "Физика",
+    "exam": "ЕГЭ",
+    "icon": "atom",
+    "color": "#27ACC1",
+    "targetScore": 87,
+    "daysToExam": 19
+  },
+  {
+    "id": "math",
+    "name": "Математика",
+    "exam": "ЕГЭ",
+    "icon": "calculator",
+    "color": "#8B7FE8",
+    "targetScore": 82,
+    "daysToExam": 19
+  },
+  {
+    "id": "russian",
+    "name": "Русский язык",
+    "exam": "ЕГЭ",
+    "icon": "book-open",
+    "color": "#B47FE8",
+    "targetScore": 90,
+    "daysToExam": 19
+  },
+  {
+    "id": "history",
+    "name": "История",
+    "exam": "ЕГЭ",
+    "icon": "landmark",
+    "color": "#16638B",
+    "targetScore": 85,
+    "daysToExam": 19
+  },
+  {
+    "id": "chemistry",
+    "name": "Химия",
+    "exam": "ЕГЭ",
+    "icon": "flask-conical",
+    "color": "#92E78A",
+    "targetScore": 80,
+    "daysToExam": 19
+  },
+  {
+    "id": "informatics",
+    "name": "Информатика",
+    "exam": "ЕГЭ",
+    "icon": "laptop",
+    "color": "#F59E0B",
+    "targetScore": 88,
+    "daysToExam": 19
+  }
+]

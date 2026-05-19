@@ -1,0 +1,15 @@
+{
+  "userName": "Александр",
+  "activeSubjectId": "physics",
+  "streak": 7,
+  "achievements": 12,
+  "completedTaskIds": [],
+  "progressBySubject": {
+    "physics": { "score": 78, "scoreDelta": 12, "chart": [45, 52, 58, 63, 68, 72, 78] },
+    "math": { "score": 68, "scoreDelta": 8, "chart": [40, 48, 52, 55, 60, 64, 68] },
+    "russian": { "score": 82, "scoreDelta": 5, "chart": [70, 72, 75, 78, 79, 80, 82] },
+    "history": { "score": 72, "scoreDelta": 10, "chart": [50, 55, 58, 62, 65, 68, 72] },
+    "chemistry": { "score": 65, "scoreDelta": 7, "chart": [42, 48, 52, 55, 58, 62, 65] },
+    "informatics": { "score": 75, "scoreDelta": 9, "chart": [55, 60, 63, 66, 70, 72, 75] }
+  }
+}

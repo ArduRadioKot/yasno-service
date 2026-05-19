@@ -1,0 +1,382 @@
+[
+  {
+    "id": "phys-001",
+    "subjectId": "physics",
+    "topic": "Механика • Динамика",
+    "difficulty": "easy",
+    "question": "Тело массой 2 кг движется под действием силы 8 Н. Определите ускорение тела, если трением можно пренебречь.",
+    "given": ["m = 2 кг", "F = 8 Н", "a = ?"],
+    "answers": [
+      { "id": 1, "text": "2 м/с²", "isCorrect": false },
+      { "id": 2, "text": "4 м/с²", "isCorrect": true },
+      { "id": 3, "text": "6 м/с²", "isCorrect": false },
+      { "id": 4, "text": "8 м/с²", "isCorrect": false }
+    ],
+    "explanation": {
+      "wrongHint": "Ты не учёл второй закон Ньютона. Сила и ускорение связаны формулой F = ma.",
+      "steps": ["F = ma", "a = F / m = 8 Н / 2 кг = 4 м/с²"],
+      "tip": "Чем больше сила и меньше масса, тем больше ускорение!"
+    }
+  },
+  {
+    "id": "phys-002",
+    "subjectId": "physics",
+    "topic": "Механика • Кинематика",
+    "difficulty": "easy",
+    "question": "Автомобиль за 10 с увеличил скорость с 10 м/с до 30 м/с. Найдите ускорение.",
+    "given": ["v₀ = 10 м/с", "v = 30 м/с", "t = 10 с"],
+    "answers": [
+      { "id": 1, "text": "1 м/с²", "isCorrect": false },
+      { "id": 2, "text": "2 м/с²", "isCorrect": true },
+      { "id": 3, "text": "3 м/с²", "isCorrect": false },
+      { "id": 4, "text": "4 м/с²", "isCorrect": false }
+    ],
+    "explanation": {
+      "wrongHint": "Используй формулу равноускоренного движения a = (v − v₀) / t.",
+      "steps": ["a = (30 − 10) / 10 = 2 м/с²"],
+      "tip": "При прямолинейном равноускоренном движении скорость меняется линейно."
+    }
+  },
+  {
+    "id": "phys-003",
+    "subjectId": "physics",
+    "topic": "Оптика • Линзы",
+    "difficulty": "medium",
+    "question": "Оптическая сила собирающей линзы 5 дптр. Чему равно её фокусное расстояние?",
+    "given": ["D = 5 дптр", "F = ?"],
+    "answers": [
+      { "id": 1, "text": "0,1 м", "isCorrect": false },
+      { "id": 2, "text": "0,2 м", "isCorrect": true },
+      { "id": 3, "text": "0,5 м", "isCorrect": false },
+      { "id": 4, "text": "2 м", "isCorrect": false }
+    ],
+    "explanation": {
+      "wrongHint": "Фокусное расстояние F = 1/D, D — в диоптриях.",
+      "steps": ["F = 1/5 = 0,2 м"],
+      "tip": "1 дптр = 1 м⁻¹ — обратный метр."
+    }
+  },
+  {
+    "id": "phys-004",
+    "subjectId": "physics",
+    "topic": "Электродинамика",
+    "difficulty": "medium",
+    "question": "Через проводник сопротивлением 4 Ом течёт ток 3 А. Найдите напряжение на концах проводника.",
+    "given": ["R = 4 Ом", "I = 3 А", "U = ?"],
+    "answers": [
+      { "id": 1, "text": "7 В", "isCorrect": false },
+      { "id": 2, "text": "12 В", "isCorrect": true },
+      { "id": 3, "text": "1,33 В", "isCorrect": false },
+      { "id": 4, "text": "0,75 В", "isCorrect": false }
+    ],
+    "explanation": {
+      "wrongHint": "Закон Ома для участка цепи: U = I·R.",
+      "steps": ["U = 3 · 4 = 12 В"],
+      "tip": "Не путай U = I·R и P = I·U."
+    }
+  },
+  {
+    "id": "math-001",
+    "subjectId": "math",
+    "topic": "Алгебра • Уравнения",
+    "difficulty": "easy",
+    "question": "Решите уравнение: 2x + 6 = 14",
+    "given": ["2x + 6 = 14"],
+    "answers": [
+      { "id": 1, "text": "x = 2", "isCorrect": false },
+      { "id": 2, "text": "x = 4", "isCorrect": true },
+      { "id": 3, "text": "x = 6", "isCorrect": false },
+      { "id": 4, "text": "x = 8", "isCorrect": false }
+    ],
+    "explanation": {
+      "wrongHint": "Перенеси 6 в правую часть со знаком минус.",
+      "steps": ["2x = 8", "x = 4"],
+      "tip": "Проверяй ответ подстановкой."
+    }
+  },
+  {
+    "id": "math-002",
+    "subjectId": "math",
+    "topic": "Производная",
+    "difficulty": "medium",
+    "question": "Найдите производную функции f(x) = x³",
+    "given": ["f(x) = x³"],
+    "answers": [
+      { "id": 1, "text": "3x²", "isCorrect": true },
+      { "id": 2, "text": "x²", "isCorrect": false },
+      { "id": 3, "text": "3x", "isCorrect": false },
+      { "id": 4, "text": "x⁴/4", "isCorrect": false }
+    ],
+    "explanation": {
+      "wrongHint": "Производная степенной функции: (xⁿ)' = n·xⁿ⁻¹.",
+      "steps": ["(x³)' = 3x²"],
+      "tip": "Не путай производную и первообразную."
+    }
+  },
+  {
+    "id": "math-003",
+    "subjectId": "math",
+    "topic": "Тригонометрия",
+    "difficulty": "medium",
+    "question": "Чему равен sin 30°?",
+    "given": ["sin 30° = ?"],
+    "answers": [
+      { "id": 1, "text": "1/2", "isCorrect": true },
+      { "id": 2, "text": "√3/2", "isCorrect": false },
+      { "id": 3, "text": "√2/2", "isCorrect": false },
+      { "id": 4, "text": "1", "isCorrect": false }
+    ],
+    "explanation": {
+      "wrongHint": "Запомни табличные значения для 30°, 45°, 60°.",
+      "steps": ["sin 30° = 1/2"],
+      "tip": "Используй таблицу или круг для проверки."
+    }
+  },
+  {
+    "id": "math-004",
+    "subjectId": "math",
+    "topic": "Теория вероятностей",
+    "difficulty": "easy",
+    "question": "Монета подброшена один раз. Какова вероятность выпадения орла?",
+    "given": ["1 подбрасывание"],
+    "answers": [
+      { "id": 1, "text": "1/4", "isCorrect": false },
+      { "id": 2, "text": "1/2", "isCorrect": true },
+      { "id": 3, "text": "1/3", "isCorrect": false },
+      { "id": 4, "text": "2/3", "isCorrect": false }
+    ],
+    "explanation": {
+      "wrongHint": "У симметричной монеты два равновозможных исхода.",
+      "steps": ["P(орёл) = 1/2"],
+      "tip": "Классическое определение: благоприятные / все."
+    }
+  },
+  {
+    "id": "rus-001",
+    "subjectId": "russian",
+    "topic": "Орфография • Пунктуация",
+    "difficulty": "easy",
+    "question": "Укажите предложение с обращением, выделенным запятыми верно.",
+    "given": [],
+    "answers": [
+      { "id": 1, "text": "Мама пришла домой.", "isCorrect": false },
+      { "id": 2, "text": "Мама, приди домой.", "isCorrect": true },
+      { "id": 3, "text": "Мама приди, домой.", "isCorrect": false },
+      { "id": 4, "text": "Мама приди домой.", "isCorrect": false }
+    ],
+    "explanation": {
+      "wrongHint": "Обращение выделяется запятыми: «Мама, приди домой».",
+      "steps": ["Обращение «Мама» отделяется запятой"],
+      "tip": "Обращение можно заменить местоимением «ты»."
+    }
+  },
+  {
+    "id": "rus-002",
+    "subjectId": "russian",
+    "topic": "Лексика • Паронимы",
+    "difficulty": "medium",
+    "question": "В каком предложении верно употреблено слово?",
+    "given": [],
+    "answers": [
+      { "id": 1, "text": "Эффектный актёр (впечатляющий)", "isCorrect": true },
+      { "id": 2, "text": "Эфектный номер (результат)", "isCorrect": false },
+      { "id": 3, "text": "Эффектный закон (действие)", "isCorrect": false },
+      { "id": 4, "text": "Эфектный спектакль", "isCorrect": false }
+    ],
+    "explanation": {
+      "wrongHint": "Эффектный — производящий впечатление; эффект — результат.",
+      "steps": ["Эффектный = яркий, запоминающийся"],
+      "tip": "Паронимы часто встречаются в заданиях 5–6."
+    }
+  },
+  {
+    "id": "hist-001",
+    "subjectId": "history",
+    "topic": "XIX век • Россия",
+    "difficulty": "easy",
+    "question": "В каком году была отменена крепостная право в России?",
+    "given": [],
+    "answers": [
+      { "id": 1, "text": "1812", "isCorrect": false },
+      { "id": 2, "text": "1861", "isCorrect": true },
+      { "id": 3, "text": "1905", "isCorrect": false },
+      { "id": 4, "text": "1917", "isCorrect": false }
+    ],
+    "explanation": {
+      "wrongHint": "Реформа Александра II — ключевая дата XIX века.",
+      "steps": ["Крепостное право отменено в 1861 году"],
+      "tip": "Свяжи с именем императора-реформатора."
+    }
+  },
+  {
+    "id": "hist-002",
+    "subjectId": "history",
+    "topic": "Первая мировая война",
+    "difficulty": "medium",
+    "question": "В каком году началась Первая мировая война?",
+    "given": [],
+    "answers": [
+      { "id": 1, "text": "1914", "isCorrect": true },
+      { "id": 2, "text": "1916", "isCorrect": false },
+      { "id": 3, "text": "1939", "isCorrect": false },
+      { "id": 4, "text": "1941", "isCorrect": false }
+    ],
+    "explanation": {
+      "wrongHint": "Не путай с началом Второй мировой (1939).",
+      "steps": ["ПМВ: 1914–1918"],
+      "tip": "Запомни «14–18» для Первой мировой."
+    }
+  },
+  {
+    "id": "chem-001",
+    "subjectId": "chemistry",
+    "topic": "Неорганическая химия",
+    "difficulty": "easy",
+    "question": "Какой заряд у иона натрия Na?",
+    "given": ["элемент Na, группа I"],
+    "answers": [
+      { "id": 1, "text": "+1", "isCorrect": true },
+      { "id": 2, "text": "−1", "isCorrect": false },
+      { "id": 3, "text": "+2", "isCorrect": false },
+      { "id": 4, "text": "0", "isCorrect": false }
+    ],
+    "explanation": {
+      "wrongHint": "Щелочные металлы отдают 1 электрон на внешний уровень.",
+      "steps": ["Na → Na⁺ + e⁻", "заряд +1"],
+      "tip": "Номер группы = степень окисления для многих металлов."
+    }
+  },
+  {
+    "id": "chem-002",
+    "subjectId": "chemistry",
+    "topic": "Расчётные задачи",
+    "difficulty": "medium",
+    "question": "Сколько моль в 36 г воды (H₂O)? M(H₂O) = 18 г/моль",
+    "given": ["m = 36 г", "M = 18 г/моль"],
+    "answers": [
+      { "id": 1, "text": "1 моль", "isCorrect": false },
+      { "id": 2, "text": "2 моль", "isCorrect": true },
+      { "id": 3, "text": "3 моль", "isCorrect": false },
+      { "id": 4, "text": "0,5 моль", "isCorrect": false }
+    ],
+    "explanation": {
+      "wrongHint": "n = m / M.",
+      "steps": ["n = 36 / 18 = 2 моль"],
+      "tip": "Следи за размерностью: г / (г/моль) = моль."
+    }
+  },
+  {
+    "id": "chem-003",
+    "subjectId": "chemistry",
+    "topic": "Органическая химия",
+    "difficulty": "medium",
+    "question": "К какому классу соединений относится C₂H₅OH?",
+    "given": ["формула C₂H₅OH"],
+    "answers": [
+      { "id": 1, "text": "Спирты", "isCorrect": true },
+      { "id": 2, "text": "Альдегиды", "isCorrect": false },
+      { "id": 3, "text": "Кислоты", "isCorrect": false },
+      { "id": 4, "text": "Амины", "isCorrect": false }
+    ],
+    "explanation": {
+      "wrongHint": "Группа −OH при насыщенном углеродном скелете — спирт.",
+      "steps": ["C₂H₅OH — этанол, спирт"],
+      "tip": "Выучи функциональные группы основных классов."
+    }
+  },
+  {
+    "id": "inf-001",
+    "subjectId": "informatics",
+    "topic": "Системы счисления",
+    "difficulty": "easy",
+    "question": "Переведите число 1010₂ в десятичную систему.",
+    "given": ["1010₂"],
+    "answers": [
+      { "id": 1, "text": "8", "isCorrect": false },
+      { "id": 2, "text": "10", "isCorrect": true },
+      { "id": 3, "text": "12", "isCorrect": false },
+      { "id": 4, "text": "14", "isCorrect": false }
+    ],
+    "explanation": {
+      "wrongHint": "Разложи по степеням двойки справа налево.",
+      "steps": ["1·8 + 0·4 + 1·2 + 0·1 = 10"],
+      "tip": "Проверь: 10₁₀ = 1010₂."
+    }
+  },
+  {
+    "id": "inf-002",
+    "subjectId": "informatics",
+    "topic": "Программирование • Python",
+    "difficulty": "medium",
+    "question": "Что выведет код: print(2 ** 3)",
+    "given": ["print(2 ** 3)"],
+    "answers": [
+      { "id": 1, "text": "6", "isCorrect": false },
+      { "id": 2, "text": "8", "isCorrect": true },
+      { "id": 3, "text": "9", "isCorrect": false },
+      { "id": 4, "text": "5", "isCorrect": false }
+    ],
+    "explanation": {
+      "wrongHint": "Оператор ** — возведение в степень, не умножение.",
+      "steps": ["2 ** 3 = 8"],
+      "tip": "В Python // — целочисленное деление, ** — степень."
+    }
+  },
+  {
+    "id": "inf-003",
+    "subjectId": "informatics",
+    "topic": "Графы",
+    "difficulty": "hard",
+    "question": "В полном графе с 5 вершинами сколько рёбер?",
+    "given": ["K₅, полный граф"],
+    "answers": [
+      { "id": 1, "text": "5", "isCorrect": false },
+      { "id": 2, "text": "10", "isCorrect": true },
+      { "id": 3, "text": "15", "isCorrect": false },
+      { "id": 4, "text": "20", "isCorrect": false }
+    ],
+    "explanation": {
+      "wrongHint": "Число рёбер в Kₙ: n(n−1)/2.",
+      "steps": ["5·4/2 = 10 рёбер"],
+      "tip": "Каждая пара вершин соединена ровно одним ребром."
+    }
+  },
+  {
+    "id": "phys-005",
+    "subjectId": "physics",
+    "topic": "Термодинамика",
+    "difficulty": "medium",
+    "question": "Идеальный газ нагревают при постоянном объёме. Что происходит с давлением?",
+    "given": ["V = const", "T увеличивается"],
+    "answers": [
+      { "id": 1, "text": "Увеличивается", "isCorrect": true },
+      { "id": 2, "text": "Уменьшается", "isCorrect": false },
+      { "id": 3, "text": "Не меняется", "isCorrect": false },
+      { "id": 4, "text": "Сначала растёт, потом падает", "isCorrect": false }
+    ],
+    "explanation": {
+      "wrongHint": "Закон Шарля для изохорного процесса: p/T = const.",
+      "steps": ["При V=const: p ~ T", "T↑ → p↑"],
+      "tip": "Изохора — вертикальная линия на p-V диаграмме."
+    }
+  },
+  {
+    "id": "math-005",
+    "subjectId": "math",
+    "topic": "Планиметрия",
+    "difficulty": "easy",
+    "question": "Площадь прямоугольника со сторонами 5 см и 8 см равна:",
+    "given": ["a = 5 см", "b = 8 см"],
+    "answers": [
+      { "id": 1, "text": "13 см²", "isCorrect": false },
+      { "id": 2, "text": "26 см²", "isCorrect": false },
+      { "id": 3, "text": "40 см²", "isCorrect": true },
+      { "id": 4, "text": "80 см²", "isCorrect": false }
+    ],
+    "explanation": {
+      "wrongHint": "S = a · b, не путай с периметром.",
+      "steps": ["S = 5 · 8 = 40 см²"],
+      "tip": "Единицы площади — см², м²."
+    }
+  }
+]
