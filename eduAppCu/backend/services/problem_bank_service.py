@@ -11,6 +11,10 @@ from services.db import (
     init_problem_bank_table,
     insert_problem_bank_batch,
 )
+from services.exam_utils import is_oge as exam_is_oge, normalize_exam_type
+from services.oge_sdamgia_client import OgeSdamGIA, SUBJECT_TO_OGE_HOST
+
+_oge_client: OgeSdamGIA | None = None
 
 try:
     from sdamgia import SdamGIA
@@ -146,16 +150,28 @@ def _strip_html(value: Any) -> str:
     return text.strip()
 
 
-def _normalize_problem_row(subject_id: str, row: dict) -> dict:
+def _normalize_problem_row(
+    subject_id: str, row: dict, exam_type: str = "ЕГЭ"
+) -> dict:
+    external_id = str(row.get("external_id") or row.get("id") or "")
+    if exam_is_oge(exam_type) and external_id and not external_id.startswith("oge-"):
+        external_id = f"oge-{external_id}"
     return {
         "subject_id": subject_id,
-        "external_id": str(row.get("external_id") or row.get("id") or ""),
+        "external_id": external_id,
         "topic": str(row.get("topic") or "Общая тема").strip(),
         "condition": _strip_html(row.get("condition")),
         "solution": _strip_html(row.get("solution")),
         "answer": _strip_html(row.get("answer")),
         "url": str(row.get("url") or "").strip(),
     }
+
+
+def _get_oge_client() -> OgeSdamGIA:
+    global _oge_client
+    if _oge_client is None:
+        _oge_client = OgeSdamGIA()
+    return _oge_client
 
 
 def _get_sdamgia_client() -> SdamGIA:
@@ -202,11 +218,14 @@ def _collect_category_candidates(
 
 
 def _fetch_problems_from_categories(
-    sdamgia,
-    sdam_subject: str,
+    client: Any,
+    api_subject: str,
     subject_id: str,
     candidates: list[tuple[float, str, str, Any]],
     needed: int,
+    *,
+    use_oge: bool = False,
+    exam_type: str = "ЕГЭ",
 ) -> list[dict]:
     collected: list[dict] = []
     seen_ids: set[str] = set()
@@ -216,7 +235,10 @@ def _fetch_problems_from_categories(
             break
 
         try:
-            problem_ids = sdamgia.get_category_by_id(sdam_subject, category_id) or []
+            if use_oge:
+                problem_ids = client.get_category_by_id(subject_id, category_id) or []
+            else:
+                problem_ids = client.get_category_by_id(api_subject, category_id) or []
         except Exception:
             continue
 
@@ -233,7 +255,10 @@ def _fetch_problems_from_categories(
                 continue
 
             try:
-                problem_data = sdamgia.get_problem_by_id(sdam_subject, problem_id)
+                if use_oge:
+                    problem_data = client.get_problem_by_id(subject_id, problem_id)
+                else:
+                    problem_data = client.get_problem_by_id(api_subject, problem_id)
             except Exception:
                 continue
 
@@ -256,6 +281,7 @@ def _fetch_problems_from_categories(
                         "answer": problem_data.get("answer"),
                         "url": problem_data.get("url", ""),
                     },
+                    exam_type="ОГЭ" if use_oge else "ЕГЭ",
                 )
             )
             time.sleep(0.04)
@@ -265,44 +291,66 @@ def _fetch_problems_from_categories(
     return collected
 
 
-def _fetch_from_sdamgia(subject_id: str, needed: int, topic_filter: str | None = None) -> list[dict]:
-    sdamgia = _get_sdamgia_client()
-    sdam_subject = SUBJECT_TO_SDAMGIA.get(subject_id)
-    if not sdam_subject:
-        raise ProblemBankError(
-            f"Предмет «{subject_id}» не сопоставлен с кодом sdamgia. "
-            f"Доступны: {', '.join(SUBJECT_TO_SDAMGIA.keys())}"
-        )
+def _fetch_from_sdamgia(
+    subject_id: str,
+    needed: int,
+    topic_filter: str | None = None,
+    exam_type: str = "ЕГЭ",
+) -> list[dict]:
+    exam_type = normalize_exam_type(exam_type)
 
-    catalog = sdamgia.get_catalog(sdam_subject)
+    if exam_is_oge(exam_type):
+        if subject_id not in SUBJECT_TO_OGE_HOST:
+            raise ProblemBankError(
+                f"Предмет «{subject_id}» недоступен для ОГЭ. "
+                f"Доступны: {', '.join(SUBJECT_TO_OGE_HOST.keys())}"
+            )
+        client = _get_oge_client()
+        catalog = client.get_catalog(subject_id)
+        bank_label = "банка заданий ОГЭ"
+    else:
+        client = _get_sdamgia_client()
+        api_subject = SUBJECT_TO_SDAMGIA.get(subject_id)
+        if not api_subject:
+            raise ProblemBankError(
+                f"Предмет «{subject_id}» не сопоставлен с кодом sdamgia. "
+                f"Доступны: {', '.join(SUBJECT_TO_SDAMGIA.keys())}"
+            )
+        catalog = client.get_catalog(api_subject)
+        bank_label = "банка заданий"
+
     if not catalog:
-        raise ProblemBankError(f"Не удалось получить каталог заданий по предмету {sdam_subject} с sdamgia.ru")
+        raise ProblemBankError(
+            f"Не удалось получить каталог заданий по предмету «{subject_id}» ({bank_label})."
+        )
 
     random.shuffle(catalog)
     candidates = _collect_category_candidates(catalog, topic_filter)
     if topic_filter and not candidates:
         raise ProblemBankError(
-            f"На sdamgia.ru не найдено тем, похожих на «{topic_filter}», по предмету «{subject_id}»."
+            f"Не найдено тем, похожих на «{topic_filter}», по предмету «{subject_id}»."
         )
 
     return _fetch_problems_from_categories(
-        sdamgia,
-        sdam_subject,
+        client,
+        subject_id if exam_is_oge(exam_type) else SUBJECT_TO_SDAMGIA[subject_id],
         subject_id,
         candidates,
         needed,
+        use_oge=exam_is_oge(exam_type),
+        exam_type=exam_type,
     )
 
 
-def ensure_problem_bank(subject_id: str, min_count: int = 8) -> None:
+def ensure_problem_bank(subject_id: str, min_count: int = 8, exam_type: str = "ЕГЭ") -> None:
     init_problem_bank_table()
     if count_problem_bank(subject_id) >= min_count:
         return
 
-    fetched = _fetch_from_sdamgia(subject_id, min_count)
+    fetched = _fetch_from_sdamgia(subject_id, min_count, exam_type=exam_type)
     if not fetched:
         raise ProblemBankError(
-            f"Не удалось загрузить задания с sdamgia.ru для предмета «{subject_id}»"
+            f"Не удалось загрузить задания для предмета «{subject_id}»"
         )
     insert_problem_bank_batch(fetched)
 
@@ -311,6 +359,7 @@ def get_problems_for_test(
     subject_id: str,
     count: int,
     topic_filter: str | None = None,
+    exam_type: str = "ЕГЭ",
 ) -> list[dict]:
     """
     Возвращает ровно count задач для теста только с sdamgia.ru.
@@ -341,7 +390,9 @@ def get_problems_for_test(
             seen.add(eid)
             collected.append(row)
 
-    live = _fetch_from_sdamgia(subject_id, fetch_batch, topic_filter=topic_filter)
+    live = _fetch_from_sdamgia(
+        subject_id, fetch_batch, topic_filter=topic_filter, exam_type=exam_type
+    )
     if live:
         insert_problem_bank_batch(live)
         add_rows(live)
@@ -364,6 +415,7 @@ def get_problems_for_test(
             subject_id,
             fetch_batch + (count - len(collected)),
             topic_filter=topic_filter,
+            exam_type=exam_type,
         )
         if extra:
             insert_problem_bank_batch(extra)
@@ -373,11 +425,11 @@ def get_problems_for_test(
         if topic_filter:
             raise ProblemBankError(
                 f"По теме «{topic_filter}» и похожим разделам найдено только {len(collected)} из {count} "
-                f"заданий на sdamgia.ru. Попробуйте меньше вопросов или другую тему."
+                f"заданий. Попробуйте меньше вопросов или другую тему."
             )
         raise ProblemBankError(
-            f"С sdamgia.ru получено только {len(collected)} из {count} заданий "
-            f"по предмету «{subject_id}». Проверьте интернет и доступность sdamgia.ru."
+            f"Получено только {len(collected)} из {count} заданий "
+            f"по предмету «{subject_id}». Проверьте интернет."
         )
 
     return collected[:count]
@@ -387,5 +439,8 @@ def get_random_problems(
     subject_id: str,
     count: int,
     topic_filter: str | None = None,
+    exam_type: str = "ЕГЭ",
 ) -> list[dict]:
-    return get_problems_for_test(subject_id, count, topic_filter=topic_filter)
+    return get_problems_for_test(
+        subject_id, count, topic_filter=topic_filter, exam_type=exam_type
+    )

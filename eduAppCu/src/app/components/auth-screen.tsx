@@ -2,6 +2,12 @@ import { useMemo, useState } from 'react';
 import { ChevronDown, ChevronLeft, Eye, EyeOff } from 'lucide-react';
 import type { UserAccount } from '../types';
 import { api } from '../api/client';
+import {
+  clampTargetForExam,
+  defaultTargetForExam,
+  normalizeTargetsForExam,
+  OGE_GRADES,
+} from '../utils/exam';
 
 const ACCOUNT_KEY = 'edu-user-account';
 
@@ -188,7 +194,14 @@ export default function AuthScreen({ onComplete }: AuthScreenProps) {
       setStep(3);
       return;
     }
-    saveAndEnter(account);
+    saveAndEnter({
+      ...account,
+      targets: normalizeTargetsForExam(
+        account.targets,
+        account.subjects,
+        account.examType
+      ),
+    });
   };
 
   return (
@@ -277,7 +290,16 @@ export default function AuthScreen({ onComplete }: AuthScreenProps) {
                         {(['ОГЭ', 'ЕГЭ'] as const).map((examType) => (
                           <button
                             key={examType}
-                            onClick={() => update({ examType })}
+                            onClick={() =>
+                              update({
+                                examType,
+                                targets: normalizeTargetsForExam(
+                                  account.targets,
+                                  account.subjects,
+                                  examType
+                                ),
+                              })
+                            }
                             className={`h-13 rounded-xl border ${account.examType === examType ? 'border-[#6D3DF5] bg-white' : 'border-[#DDDDE4] bg-[#F7F7FA]'} font-medium`}
                           >
                             {examType}
@@ -307,7 +329,9 @@ export default function AuthScreen({ onComplete }: AuthScreenProps) {
                                   subjects,
                                   targets: {
                                     ...account.targets,
-                                    [subjectId]: account.targets[subjectId] ?? 80,
+                                    [subjectId]:
+                                      account.targets[subjectId] ??
+                                      defaultTargetForExam(account.examType),
                                   },
                                 });
                               }}
@@ -330,18 +354,81 @@ export default function AuthScreen({ onComplete }: AuthScreenProps) {
               {step === 3 && (
                 <>
                   <h1 className="text-2xl font-semibold mb-1">К какому результату идем?</h1>
-                  <p className="text-sm text-[#707076] mb-8">Чтобы получить доступ к задачам</p>
+                  <p className="text-sm text-[#707076] mb-8">
+                    {account.examType === 'ОГЭ'
+                      ? 'Выберите целевую оценку на экзамен (от 2 до 5)'
+                      : 'Укажите целевой балл на экзамен (0–100)'}
+                  </p>
                   <div className="space-y-5">
-                    {account.subjects.map((subjectId) => (
-                      <div key={subjectId}>
-                        <p className="text-sm font-medium text-[#707076] mb-2">{subjectLabels[subjectId]}</p>
-                        <div className="grid grid-cols-[60px_1fr_60px] gap-2">
-                          <button onClick={() => update({ targets: { ...account.targets, [subjectId]: Math.max(0, (account.targets[subjectId] ?? 80) - 1) } })} className="h-13 rounded-xl border border-[#DDDDE4] bg-[#F7F7FA] text-[#9A9AA2]">-</button>
-                          <div className="h-13 rounded-xl border border-[#DDDDE4] bg-[#F7F7FA] flex items-center justify-center text-lg">{account.targets[subjectId] ?? 80}</div>
-                          <button onClick={() => update({ targets: { ...account.targets, [subjectId]: Math.min(100, (account.targets[subjectId] ?? 80) + 1) } })} className="h-13 rounded-xl border border-[#DDDDE4] bg-[#F7F7FA] text-[#9A9AA2]">+</button>
+                    {account.subjects.map((subjectId) => {
+                      const current = clampTargetForExam(
+                        account.targets[subjectId],
+                        account.examType
+                      );
+                      return (
+                        <div key={subjectId}>
+                          <p className="text-sm font-medium text-[#707076] mb-2">
+                            {subjectLabels[subjectId]}
+                          </p>
+                          {account.examType === 'ОГЭ' ? (
+                            <div className="grid grid-cols-4 gap-2">
+                              {OGE_GRADES.map((grade) => (
+                                <button
+                                  key={grade}
+                                  type="button"
+                                  onClick={() =>
+                                    update({
+                                      targets: { ...account.targets, [subjectId]: grade },
+                                    })
+                                  }
+                                  className={`h-13 rounded-xl border font-semibold text-lg transition-colors ${
+                                    current === grade
+                                      ? 'border-[#6D3DF5] bg-[#6D3DF5]/10 text-[#6D3DF5]'
+                                      : 'border-[#DDDDE4] bg-[#F7F7FA] text-[#707076] hover:border-[#6D3DF5]/40'
+                                  }`}
+                                >
+                                  {grade}
+                                </button>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-[60px_1fr_60px] gap-2">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  update({
+                                    targets: {
+                                      ...account.targets,
+                                      [subjectId]: Math.max(0, current - 1),
+                                    },
+                                  })
+                                }
+                                className="h-13 rounded-xl border border-[#DDDDE4] bg-[#F7F7FA] text-[#9A9AA2]"
+                              >
+                                -
+                              </button>
+                              <div className="h-13 rounded-xl border border-[#DDDDE4] bg-[#F7F7FA] flex items-center justify-center text-lg">
+                                {current}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  update({
+                                    targets: {
+                                      ...account.targets,
+                                      [subjectId]: Math.min(100, current + 1),
+                                    },
+                                  })
+                                }
+                                className="h-13 rounded-xl border border-[#DDDDE4] bg-[#F7F7FA] text-[#9A9AA2]"
+                              >
+                                +
+                              </button>
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </>
               )}

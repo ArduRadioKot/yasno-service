@@ -42,6 +42,15 @@ export default function TaskScreen() {
   const [analysis, setAnalysis] = useState<AiTestAnalysis | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
 
+  const isOgeExam = account.examType === 'ОГЭ';
+
+  const formatExamScore = (value: number) => {
+    if (isOgeExam) {
+      return `${Math.max(2, Math.min(5, Math.round(value)))} (оценка)`;
+    }
+    return `${value} баллов`;
+  };
+
   const loadTask = useCallback(
     async (taskId?: string) => {
       setLoading(true);
@@ -104,7 +113,10 @@ export default function TaskScreen() {
       const test = await api.generateTest(
         activeSubjectId,
         'диагностика по предмету',
-        testQuestionCount
+        testQuestionCount,
+        undefined,
+        account.examType,
+        account.email
       );
       if (!test.questions?.length) {
         throw new Error('Не удалось загрузить задания для теста');
@@ -220,7 +232,8 @@ export default function TaskScreen() {
         activeSubjectId,
         answers,
         multiIds,
-        account.email
+        account.email,
+        account.examType
       );
       setAnalysis(result);
       setShowAnalysis(true);
@@ -237,7 +250,10 @@ export default function TaskScreen() {
         analysis: `Вы правильно ответили на ${correct} из ${answers.length}. Повторите темы, где были ошибки.`,
         gaps,
         score: percent,
-        examScore: Math.round(percent * 0.9),
+        examScore: isOgeExam
+          ? (percent < 25 ? 2 : percent < 50 ? 3 : percent < 75 ? 4 : 5)
+          : Math.round(percent * 0.9),
+        examType: account.examType,
         level:
           correct >= answers.length * 0.8
             ? 'сильный'
@@ -347,7 +363,7 @@ export default function TaskScreen() {
           <Loader2 className="size-12 animate-spin text-[#6D3DF5] mx-auto mb-4" />
           <h3 className="font-semibold text-lg mb-2">Идёт загрузка</h3>
           <p className="text-sm text-muted-foreground">
-            Подготовка аналитики: Mistral AI проверяет ответы и считает прогноз баллов
+            Подготовка аналитики: ИИ проверяет ответы и считает прогноз {isOgeExam ? 'оценки (2–5)' : 'баллов'}
           </p>
         </div>
       </div>
@@ -386,14 +402,31 @@ export default function TaskScreen() {
                   <div className="font-bold text-lg">{correctCount} из {totalQuestions}</div>
                 </div>
                 <div className="bg-white rounded-xl p-3 border border-border">
-                  <div className="text-sm text-muted-foreground mb-1">Прогноз на экзамен</div>
-                  <div className="font-bold text-lg">{analysis.examScore ?? Math.round(analysis.score * 0.9)} баллов</div>
+                  <div className="text-sm text-muted-foreground mb-1">
+                    Прогноз на {isOgeExam ? 'ОГЭ' : 'ЕГЭ'}
+                  </div>
+                  <div className="font-bold text-lg">
+                    {formatExamScore(
+                      analysis.examScore ??
+                        (isOgeExam
+                          ? analysis.score < 25
+                            ? 2
+                            : analysis.score < 50
+                              ? 3
+                              : analysis.score < 75
+                                ? 4
+                                : 5
+                          : Math.round(analysis.score * 0.9))
+                    )}
+                  </div>
                 </div>
               </div>
               <div className="bg-[#6D3DF5]/5 rounded-xl p-3 border border-[#6D3DF5]/20">
                 <p className="text-xs text-muted-foreground mb-1">Как рассчитывается прогноз:</p>
                 <p className="text-sm">
-                  Баллы рассчитывает ИИ по результатам теста и обновляет график на главной.
+                  {isOgeExam
+                    ? 'Оценка от 2 до 5 рассчитывается по доле правильных ответов и отображается на главной.'
+                    : 'Баллы рассчитывает ИИ по результатам теста и обновляет график на главной.'}
                 </p>
               </div>
             </div>

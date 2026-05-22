@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { api } from '../api/client';
 import { useApp } from '../context/AppContext';
+import { clampTargetForExam, formatTargetLong } from '../utils/exam';
 import type { PlanData, PlanSection, PlanTopic } from '../types';
 import SubjectSelector from './subject-selector';
 
@@ -195,7 +196,13 @@ export default function PlanScreen() {
           <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-2">Твой план</h1>
           <p className="text-muted-foreground mb-6">
             {activeSubject
-              ? `${activeSubject.name} — путь к цели ${activeSubject.targetScore} баллов`
+              ? `${activeSubject.name} — ${formatTargetLong(
+                  clampTargetForExam(
+                    account.targets[activeSubject.id] ?? activeSubject.targetScore,
+                    account.examType
+                  ),
+                  account.examType
+                )}`
               : 'Выбери предмет'}
           </p>
 

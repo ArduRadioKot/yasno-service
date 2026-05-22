@@ -1,5 +1,6 @@
 import { useApp } from '../context/AppContext';
 import type { Subject } from '../types';
+import { clampTargetForExam, formatTargetShort } from '../utils/exam';
 import {
   Atom,
   Calculator,
@@ -42,7 +43,13 @@ export default function SubjectSelector({
   variant = 'pills',
   className = '',
 }: SubjectSelectorProps) {
-  const { subjects, activeSubjectId, setActiveSubject } = useApp();
+  const { subjects, activeSubjectId, setActiveSubject, account } = useApp();
+
+  const targetLabelFor = (subject: Subject) =>
+    formatTargetShort(
+      clampTargetForExam(account.targets[subject.id] ?? subject.targetScore, account.examType),
+      account.examType
+    );
 
   if (variant === 'grid') {
     return (
@@ -53,6 +60,7 @@ export default function SubjectSelector({
             subject={subject}
             active={activeSubjectId === subject.id}
             onSelect={() => setActiveSubject(subject.id)}
+            targetLabel={targetLabelFor(subject)}
           />
         ))}
       </div>
@@ -86,10 +94,12 @@ function SubjectCard({
   subject,
   active,
   onSelect,
+  targetLabel,
 }: {
   subject: Subject;
   active: boolean;
   onSelect: () => void;
+  targetLabel: string;
 }) {
   return (
     <button
@@ -103,7 +113,7 @@ function SubjectCard({
       <SubjectIcon iconName={subject.icon} className="size-8 mb-2" />
       <span className="font-semibold block">{subject.name}</span>
       <span className="text-xs mt-1 block text-muted-foreground">
-        цель {subject.targetScore} б.
+        {targetLabel}
       </span>
     </button>
   );

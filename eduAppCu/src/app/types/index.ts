@@ -63,6 +63,7 @@ export type AiTestData = {
   subjectIds?: string[];
   subjectId?: string;
   topicName?: string;
+  examType?: 'ОГЭ' | 'ЕГЭ';
 };
 
 export type AiTestAnswer = {
@@ -88,6 +89,7 @@ export type AiTestAnalysis = {
   gaps: string[];
   score: number;
   examScore: number;
+  examType?: 'ОГЭ' | 'ЕГЭ';
   level: string;
   breakdowns?: AiTestBreakdown[];
   subjects?: string[];
@@ -140,6 +142,9 @@ export type PlanTopicBrief = {
 export type DashboardData = {
   userName: string;
   subject: Subject;
+  examType?: 'ОГЭ' | 'ЕГЭ';
+  scoreLabel?: string;
+  forecastTitle?: string;
   score: number;
   scoreDelta: number;
   chart: { day: number; score: number }[];

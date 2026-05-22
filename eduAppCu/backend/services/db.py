@@ -253,7 +253,11 @@ def create_user(
         
         # Insert selected subjects with targets
         for subject_id in subjects:
-            target_score = targets.get(subject_id, 80)
+            from services.exam_utils import normalize_target_score
+
+            target_score = normalize_target_score(
+                targets.get(subject_id, 80), exam_type
+            )
             cursor.execute(
                 """
                 INSERT INTO user_subjects (user_id, subject_id, target_score)

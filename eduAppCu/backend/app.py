@@ -8,6 +8,14 @@ from dotenv import load_dotenv
 from services.ai_client import chat_completion, extract_json, is_ai_available
 from services.data_service import data_service
 from services.problem_bank_service import ProblemBankError, ensure_problem_bank
+from services.exam_utils import (
+    exam_forecast_title,
+    exam_score_label,
+    is_oge,
+    normalize_exam_type,
+    normalize_target_score,
+    predict_exam_result,
+)
 from services.test_service import (
     analyze_multi_subject_test as run_multi_analysis,
     analyze_test as run_test_analysis,
@@ -19,6 +27,7 @@ from services.db import (
     create_user,
     get_user_by_email,
     get_user_subjects,
+    get_user_targets,
     get_user_settings,
     update_user_settings,
     get_user_progress,
@@ -39,6 +48,17 @@ app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 init_db()
+
+
+def resolve_exam_type(body: dict | None = None, email: str | None = None) -> str:
+    body = body or {}
+    if body.get("examType"):
+        return normalize_exam_type(body.get("examType"))
+    if email:
+        user = get_user_by_email(email)
+        if user and user.get("exam_type"):
+            return normalize_exam_type(user["exam_type"])
+    return "ЕГЭ"
 
 
 SUBJECT_FALLBACK_QUESTIONS = {
@@ -271,7 +291,13 @@ def fallback_generated_task(subject_id: str, subject_name: str, topic: str):
     }
 
 
-def fallback_analysis(subject_id: str, subject_name: str, answers: list[dict]):
+def fallback_analysis(
+    subject_id: str,
+    subject_name: str,
+    answers: list[dict],
+    exam_type: str = "ЕГЭ",
+):
+    exam_type = normalize_exam_type(exam_type)
     total = len(answers)
     correct_count = sum(1 for a in answers if a.get("correct"))
     score = round((correct_count / total) * 100) if total else 0
@@ -290,11 +316,13 @@ def fallback_analysis(subject_id: str, subject_name: str, answers: list[dict]):
         analysis += "В план добавлены темы, которые стоит подтянуть в первую очередь."
     else:
         analysis += "Явных пробелов не видно, можно переходить к задачам повышенной сложности."
+    exam_score = predict_exam_result(subject_id, score, exam_type=exam_type)
     return {
         "analysis": analysis,
         "gaps": gaps,
         "score": score,
-        "examScore": round(score * 0.9),
+        "examScore": exam_score,
+        "examType": exam_type,
         "level": level,
         "breakdowns": [],
     }
@@ -351,12 +379,24 @@ def list_subjects():
         user = get_user_by_email(email)
         if user:
             user_subjects = get_user_subjects(user["id"])
+            user_targets = get_user_targets(user["id"])
             all_subjects = data_service.get_subjects()
-            filtered_subjects = [s for s in all_subjects if s["id"] in user_subjects]
+            exam_type = normalize_exam_type(user.get("exam_type"))
+            filtered_subjects = []
+            for s in all_subjects:
+                if s["id"] not in user_subjects:
+                    continue
+                subject = dict(s)
+                if s["id"] in user_targets:
+                    subject["targetScore"] = normalize_target_score(
+                        user_targets[s["id"]], exam_type
+                    )
+                filtered_subjects.append(subject)
             return jsonify(
                 {
                     "subjects": filtered_subjects,
                     "activeSubjectId": active,
+                    "examType": exam_type,
                 }
             )
     
@@ -364,6 +404,7 @@ def list_subjects():
         {
             "subjects": data_service.get_subjects(),
             "activeSubjectId": active,
+            "examType": "ЕГЭ",
         }
     )
 
@@ -425,6 +466,7 @@ def dashboard():
         completed_task_ids = settings.get("completed_task_ids") or []
         subject_task_stats = get_subject_task_progress(user_id, subject_id)
 
+    exam_type = resolve_exam_type(email=email)
     data = data_service.get_dashboard(
         subject_id,
         topic_overrides=topic_overrides,
@@ -434,6 +476,13 @@ def dashboard():
     )
     if not data:
         return jsonify({"error": "Subject not found"}), 404
+
+    data["examType"] = exam_type
+    data["scoreLabel"] = exam_score_label(exam_type)
+    data["forecastTitle"] = exam_forecast_title(exam_type)
+    if is_oge(exam_type):
+        data["score"] = max(2, min(5, int(data.get("score", 0))))
+        data["scoreDelta"] = max(-3, min(3, int(data.get("scoreDelta", 0))))
 
     if email and user_id:
         progress = get_user_progress(user_id, subject_id)
@@ -731,6 +780,8 @@ def chat_suggestions():
 @app.post("/api/generate-test")
 def generate_test():
     body = request.get_json(silent=True) or {}
+    email = body.get("email") or request.args.get("email")
+    exam_type = resolve_exam_type(body, email)
     subject_ids = body.get("subjectIds")
     subject_id = (
         body.get("subjectId")
@@ -743,12 +794,13 @@ def generate_test():
             topic = body.get("topic") or "комплексная диагностика"
             count_per_subject = int(body.get("count") or 3)
             for sid in subject_ids:
-                ensure_problem_bank(sid)
+                ensure_problem_bank(sid, exam_type=exam_type)
             return jsonify(
                 generate_multi_subject_test(
                     subject_ids,
                     topic=topic,
                     count_per_subject=count_per_subject,
+                    exam_type=exam_type,
                 )
             )
 
@@ -756,12 +808,14 @@ def generate_test():
         topic_name = (body.get("topicName") or request.args.get("topicName") or "").strip() or None
         count = int(body.get("count") or request.args.get("count") or 5)
         count = max(1, min(count, 12))
+        ensure_problem_bank(subject_id, exam_type=exam_type)
         return jsonify(
             run_generate_test(
                 subject_id,
                 topic=topic,
                 count=count,
                 topic_name=topic_name,
+                exam_type=exam_type,
             )
         )
     except ProblemBankError as exc:
@@ -778,8 +832,10 @@ def analyze_test():
     subject_id = body.get("subjectId") or request.args.get("subjectId") or data_service.get_active_subject_id()
     answers = body.get("answers", [])
 
+    exam_type = resolve_exam_type(body, email)
+
     if subject_ids and isinstance(subject_ids, list):
-        analysis_data = run_multi_analysis(subject_ids, answers)
+        analysis_data = run_multi_analysis(subject_ids, answers, exam_type=exam_type)
         user = get_user_by_email(email) if email else None
         if user:
             user_id = user["id"]
@@ -788,7 +844,9 @@ def analyze_test():
                     subject_answers = [a for a in answers if a.get("subjectId") == sid]
                     if not subject_answers:
                         continue
-                    sub_result = run_test_analysis(sid, subject_answers)
+                    sub_result = run_test_analysis(
+                        sid, subject_answers, exam_type=exam_type
+                    )
                     data_service.update_plan_from_gaps(
                         sid,
                         sub_result.get("gaps", []),
@@ -833,9 +891,13 @@ def analyze_test():
     subject_name = subject["name"] if subject else "предмету"
 
     try:
-        analysis_data = run_test_analysis(subject_id, answers, subject_name=subject_name)
+        analysis_data = run_test_analysis(
+            subject_id, answers, subject_name=subject_name, exam_type=exam_type
+        )
     except Exception:
-        analysis_data = fallback_analysis(subject_id, subject_name, answers)
+        analysis_data = fallback_analysis(
+            subject_id, subject_name, answers, exam_type=exam_type
+        )
         analysis_data["examScore"] = analysis_data.get("score", 0)
         analysis_data["breakdowns"] = []
 

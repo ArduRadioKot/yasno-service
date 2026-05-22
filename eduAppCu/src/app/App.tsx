@@ -45,7 +45,15 @@ function AppShell({
     // Set first subject as active, but generate test for all selected subjects
     const firstSubjectId = subjectIds[0];
     setActiveSubject(firstSubjectId)
-      .then(() => api.generateTestWithSubjects(subjectIds, 'первичная диагностика', 3, account.email))
+      .then(() =>
+        api.generateTestWithSubjects(
+          subjectIds,
+          'первичная диагностика',
+          3,
+          account.email,
+          account.examType
+        )
+      )
       .then((test) => {
         if (cancelled) return;
         if (!test.questions?.length) {
@@ -65,7 +73,7 @@ function AppShell({
     return () => {
       cancelled = true;
     };
-  }, [account.subjects, setActiveSubject, setActiveTab]);
+  }, [account.subjects, account.examType, setActiveSubject, setActiveTab]);
 
   const renderScreen = () => {
     switch (activeTab) {

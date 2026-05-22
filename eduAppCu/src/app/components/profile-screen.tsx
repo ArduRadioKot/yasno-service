@@ -1,5 +1,6 @@
 import { LogOut, Mail, Target, UserRound } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { formatTargetShort } from '../utils/exam';
 
 const subjectLabels: Record<string, string> = {
   math: 'Математика',
@@ -81,7 +82,9 @@ export default function ProfileScreen() {
               {account.subjects.map((subjectId) => (
                 <div key={subjectId} className="flex items-center justify-between gap-4 rounded-2xl bg-muted/50 px-4 py-3">
                   <span className="font-medium">{subjectLabels[subjectId] ?? subjectId}</span>
-                  <span className="font-bold text-[#6D3DF5]">{account.targets[subjectId] ?? 80} б.</span>
+                  <span className="font-bold text-[#6D3DF5]">
+                    {formatTargetShort(account.targets[subjectId], account.examType)}
+                  </span>
                 </div>
               ))}
             </div>

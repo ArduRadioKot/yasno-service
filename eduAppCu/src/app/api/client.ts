@@ -120,9 +120,11 @@ export const api = {
       body: JSON.stringify({ subjectId }),
     }),
 
-  getDashboard: (subjectId: string, email?: string) =>
+  getDashboard: (subjectId: string, email?: string, examType?: string) =>
     request<DashboardData>(
-      email ? `/dashboard?subjectId=${subjectId}&email=${encodeURIComponent(email)}` : `/dashboard?subjectId=${subjectId}`
+      email
+        ? `/dashboard?subjectId=${subjectId}&email=${encodeURIComponent(email)}${examType ? `&examType=${encodeURIComponent(examType)}` : ''}`
+        : `/dashboard?subjectId=${subjectId}${examType ? `?examType=${encodeURIComponent(examType)}` : ''}`
     ),
 
   getPlan: (subjectId: string, email?: string) =>
@@ -187,7 +189,9 @@ export const api = {
     subjectId: string,
     topic = 'диагностика по предмету',
     count = 5,
-    topicName?: string
+    topicName?: string,
+    examType?: string,
+    email?: string
   ) =>
     request<AiTestData>('/generate-test', {
       method: 'POST',
@@ -196,26 +200,35 @@ export const api = {
         topic,
         count,
         ...(topicName ? { topicName } : {}),
+        ...(examType ? { examType } : {}),
+        ...(email ? { email } : {}),
       }),
     }),
 
-  generateTestWithSubjects: (subjectIds: string[], topic = 'диагностика по предмету', count = 3, email?: string) =>
+  generateTestWithSubjects: (
+    subjectIds: string[],
+    topic = 'диагностика по предмету',
+    count = 3,
+    email?: string,
+    examType?: string
+  ) =>
     request<AiTestData>('/generate-test', {
       method: 'POST',
-      body: JSON.stringify({ subjectIds, topic, count, email }),
+      body: JSON.stringify({ subjectIds, topic, count, email, examType }),
     }),
 
   analyzeTestResults: (
     subjectId: string,
     answers: AiTestAnswer[],
     subjectIds?: string[],
-    email?: string
+    email?: string,
+    examType?: string
   ) =>
     request<AiTestAnalysis>(
       `/analyze-test?subjectId=${subjectId}${email ? `&email=${encodeURIComponent(email)}` : ''}`,
       {
         method: 'POST',
-        body: JSON.stringify({ answers, subjectIds, subjectId, email }),
+        body: JSON.stringify({ answers, subjectIds, subjectId, email, examType }),
       }
     ),
 };

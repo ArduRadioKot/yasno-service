@@ -1,5 +1,6 @@
 import { Home, BookOpen, BarChart3, MessageCircle, UserRound, LogOut } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { clampTargetForExam, formatTargetShort } from '../utils/exam';
 
 type NavItem = {
   id: string;
@@ -67,7 +68,15 @@ export default function SidebarNav({ activeTab, onTabChange }: SidebarNavProps) 
           <div className="min-w-0">
             <p className="font-medium truncate">{name}</p>
             <p className="text-xs text-muted-foreground">
-              {activeSubject ? `цель ${activeSubject.targetScore} б.` : 'выбери предмет'}
+              {activeSubject
+                ? formatTargetShort(
+                    clampTargetForExam(
+                      account.targets[activeSubject.id] ?? activeSubject.targetScore,
+                      account.examType
+                    ),
+                    account.examType
+                  )
+                : 'выбери предмет'}
             </p>
           </div>
         </button>

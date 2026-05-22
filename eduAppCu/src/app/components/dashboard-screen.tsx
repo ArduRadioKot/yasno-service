@@ -23,6 +23,7 @@ import {
 import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer } from 'recharts';
 import { api, setAiTestData } from '../api/client';
 import { useApp } from '../context/AppContext';
+import { clampTargetForExam, formatTargetShort } from '../utils/exam';
 import type { DashboardData, PlanTopicBrief } from '../types';
 import SubjectSelector from './subject-selector';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
@@ -94,7 +95,7 @@ export default function DashboardScreen() {
   const loadDashboard = () => {
     setLoading(true);
     return api
-      .getDashboard(activeSubjectId, account.email)
+      .getDashboard(activeSubjectId, account.email, account.examType)
       .then((d) => setData(d))
       .finally(() => setLoading(false));
   };
@@ -112,10 +113,15 @@ export default function DashboardScreen() {
       cancelled = true;
       window.removeEventListener('edu-test-complete', onTestComplete);
     };
-  }, [activeSubjectId, account.email]);
+  }, [activeSubjectId, account.email, account.examType]);
 
   const color = '#6D3DF5';
   const userName = account.firstName || data?.userName || 'Ученик';
+  const isOge = (data?.examType ?? account.examType) === 'ОГЭ';
+  const scoreLabel = data?.scoreLabel ?? (isOge ? 'оценка' : 'баллов');
+  const forecastTitle = data?.forecastTitle ?? (isOge ? 'Прогноз ОГЭ' : 'Прогноз ЕГЭ');
+  const chartDomain: [number, number] = isOge ? [2, 5] : [0, 100];
+
   const taskProgressPercent = data
     ? data.tasksTotal > 0
       ? Math.min(100, Math.round((data.tasksCompleted / data.tasksTotal) * 100))
@@ -153,7 +159,14 @@ export default function DashboardScreen() {
 
     try {
       await setActiveSubject(subjectId);
-      const test = await api.generateTest(subjectId, topicLabel, count, topicName);
+      const test = await api.generateTest(
+        subjectId,
+        topicLabel,
+        count,
+        topicName,
+        account.examType,
+        account.email
+      );
       if (!test.questions?.length) {
         throw new Error('Не удалось загрузить задания для теста');
       }
@@ -239,11 +252,11 @@ export default function DashboardScreen() {
               <div className="flex items-start justify-between mb-4">
                 <div>
                   <p className="text-muted-foreground mb-1">
-                    Прогноз ЕГЭ · {data.subject.name}
+                    {forecastTitle} · {data.subject.name}
                   </p>
                   <div className="flex items-baseline gap-2">
                     <h2 className="text-4xl sm:text-5xl font-bold text-foreground">{data.score}</h2>
-                    <span className="text-muted-foreground text-xl">баллов</span>
+                    <span className="text-muted-foreground text-xl">{scoreLabel}</span>
                   </div>
                 </div>
                 <div className="bg-[#F7F7FA] rounded-xl px-4 py-2 border border-border">
@@ -258,7 +271,7 @@ export default function DashboardScreen() {
                   <ResponsiveContainer width="100%" height={112}>
                     <AreaChart data={data.chart} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
                       <XAxis dataKey="day" hide />
-                      <YAxis hide domain={[0, 100]} />
+                      <YAxis hide domain={chartDomain} />
                       <Area
                         type="monotone"
                         dataKey="score"
@@ -504,7 +517,15 @@ export default function DashboardScreen() {
               </div>
                 <div>
                   <div className="font-semibold">{subject.name}</div>
-                  <div className="text-sm text-muted-foreground">{subject.targetScore} баллов</div>
+                  <div className="text-sm text-muted-foreground">
+                    {formatTargetShort(
+                      clampTargetForExam(
+                        account.targets[subject.id] ?? subject.targetScore,
+                        account.examType
+                      ),
+                      account.examType
+                    )}
+                  </div>
                 </div>
               </button>
             ))}
