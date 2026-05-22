@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Send, Sparkles, BookOpen, FileQuestion, Zap, Loader2, Hand } from 'lucide-react';
 import { api } from '../api/client';
 import { useApp } from '../context/AppContext';
@@ -11,7 +11,7 @@ const iconMap = {
 };
 
 export default function ChatScreen() {
-  const { activeSubjectId, activeSubject } = useApp();
+  const { activeSubjectId, activeSubject, pendingChatPrompt, clearPendingChatPrompt } = useApp();
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 1,
@@ -37,41 +37,55 @@ export default function ChatScreen() {
       );
   }, [activeSubjectId]);
 
-  const handleSend = async (text?: string) => {
-    const msg = (text ?? inputText).trim();
-    if (!msg || sending) return;
+  const handleSend = useCallback(
+    async (text?: string) => {
+      const msg = (text ?? inputText).trim();
+      if (!msg || sending) return;
 
-    const userMsg: ChatMessage = {
-      id: Date.now(),
-      role: 'user',
-      content: msg,
-    };
-    setMessages((prev) => [...prev, userMsg]);
-    setInputText('');
-    setSending(true);
+      const userMsg: ChatMessage = {
+        id: Date.now(),
+        role: 'user',
+        content: msg,
+      };
+      setMessages((prev) => [...prev, userMsg]);
+      setInputText('');
+      setSending(true);
 
-    try {
-      const reply = await api.chat(msg, activeSubjectId);
-      setMessages((prev) => [
-        ...prev,
-        { id: Date.now() + 1, role: 'assistant', content: reply.content },
-      ]);
-    } catch (error) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: Date.now() + 1,
-          role: 'assistant',
-          content:
-            error instanceof Error
-              ? error.message
-              : 'AI-чат сейчас недоступен. Проверь backend и настройки OpenRouter.',
-        },
-      ]);
-    } finally {
-      setSending(false);
-    }
-  };
+      try {
+        const reply = await api.chat(msg, activeSubjectId);
+        setMessages((prev) => [
+          ...prev,
+          { id: Date.now() + 1, role: 'assistant', content: reply.content },
+        ]);
+      } catch (error) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: Date.now() + 1,
+            role: 'assistant',
+            content:
+              error instanceof Error
+                ? error.message
+                : 'AI-чат сейчас недоступен. Проверьте backend и MISTRAL_API_KEY.',
+          },
+        ]);
+      } finally {
+        setSending(false);
+      }
+    },
+    [activeSubjectId, inputText, sending]
+  );
+
+  const pendingHandled = useRef(false);
+  useEffect(() => {
+    if (!pendingChatPrompt || pendingHandled.current) return;
+    pendingHandled.current = true;
+    const prompt = pendingChatPrompt;
+    clearPendingChatPrompt();
+    handleSend(prompt).finally(() => {
+      pendingHandled.current = false;
+    });
+  }, [pendingChatPrompt, clearPendingChatPrompt, handleSend]);
 
   return (
     <div className="h-full flex flex-col bg-[#F3F4F6]">

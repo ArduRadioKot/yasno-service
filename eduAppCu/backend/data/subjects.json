@@ -52,5 +52,50 @@
     "color": "#F59E0B",
     "targetScore": 88,
     "daysToExam": 19
+  },
+  {
+    "id": "biology",
+    "name": "Биология",
+    "exam": "ЕГЭ",
+    "icon": "dna",
+    "color": "#22C55E",
+    "targetScore": 82,
+    "daysToExam": 19
+  },
+  {
+    "id": "geography",
+    "name": "География",
+    "exam": "ЕГЭ",
+    "icon": "globe",
+    "color": "#0EA5E9",
+    "targetScore": 80,
+    "daysToExam": 19
+  },
+  {
+    "id": "literature",
+    "name": "Литература",
+    "exam": "ЕГЭ",
+    "icon": "scroll-text",
+    "color": "#EC4899",
+    "targetScore": 85,
+    "daysToExam": 19
+  },
+  {
+    "id": "french",
+    "name": "Французский язык",
+    "exam": "ЕГЭ",
+    "icon": "languages",
+    "color": "#6366F1",
+    "targetScore": 78,
+    "daysToExam": 19
+  },
+  {
+    "id": "social",
+    "name": "Обществознание",
+    "exam": "ЕГЭ",
+    "icon": "users",
+    "color": "#F97316",
+    "targetScore": 84,
+    "daysToExam": 19
   }
 ]

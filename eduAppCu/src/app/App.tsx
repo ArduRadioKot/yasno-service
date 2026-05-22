@@ -48,8 +48,16 @@ function AppShell({
       .then(() => api.generateTestWithSubjects(subjectIds, 'первичная диагностика', 3, account.email))
       .then((test) => {
         if (cancelled) return;
-        setAiTestData(test);
+        if (!test.questions?.length) {
+          throw new Error('Не удалось загрузить задания для первичной диагностики');
+        }
+        setAiTestData({ ...test, subjectIds });
         setActiveTab('task');
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          console.error('Primary diagnostic failed:', error);
+        }
       })
       .finally(() => {
         if (!cancelled) setAutoStarting(false);
@@ -138,6 +146,8 @@ export default function App() {
       onAccountChange={handleAccountChange}
       onLogout={handleLogout}
       onNavigateToTasks={() => setActiveTab('task')}
+      onNavigateToPlan={() => setActiveTab('plan')}
+      onNavigateToChat={() => setActiveTab('chat')}
     >
       <AppShell activeTab={activeTab} setActiveTab={setActiveTab} />
     </AppProvider>

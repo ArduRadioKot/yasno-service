@@ -1,6 +1,18 @@
 import { useApp } from '../context/AppContext';
 import type { Subject } from '../types';
-import { Atom, Calculator, BookOpen, Landmark, FlaskConical, Laptop } from 'lucide-react';
+import {
+  Atom,
+  Calculator,
+  BookOpen,
+  Landmark,
+  FlaskConical,
+  Laptop,
+  Dna,
+  Globe,
+  ScrollText,
+  Languages,
+  Users,
+} from 'lucide-react';
 
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   'atom': Atom,
@@ -9,6 +21,11 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   'landmark': Landmark,
   'flask-conical': FlaskConical,
   'laptop': Laptop,
+  'dna': Dna,
+  'globe': Globe,
+  'scroll-text': ScrollText,
+  'languages': Languages,
+  'users': Users,
 };
 
 function SubjectIcon({ iconName, className }: { iconName: string; className?: string }) {

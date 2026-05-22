@@ -4,9 +4,16 @@ import os
 import json
 import re
 from dotenv import load_dotenv
-from openai import OpenAI
 
+from services.ai_client import chat_completion, extract_json, is_ai_available
 from services.data_service import data_service
+from services.problem_bank_service import ProblemBankError, ensure_problem_bank
+from services.test_service import (
+    analyze_multi_subject_test as run_multi_analysis,
+    analyze_test as run_test_analysis,
+    generate_multi_subject_test,
+    generate_test as run_generate_test,
+)
 from services.db import (
     init_db,
     create_user,
@@ -15,28 +22,23 @@ from services.db import (
     get_user_settings,
     update_user_settings,
     get_user_progress,
-    update_user_progress,
     upsert_user_progress,
+    get_topic_progress,
+    get_user_plan_topics,
+    set_topic_progress,
+    add_completed_task,
+    update_plan_topic_entry,
+    get_subject_task_progress,
+    record_test_task_progress,
 )
 import datetime
 
-# Load environment variables from .env file
 load_dotenv()
 
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
-# Initialize SQLite database
 init_db()
-
-# Initialize OpenAI client for Gemma 4b
-openrouter_api_key = os.getenv("OPENROUTER_API_KEY", "")
-client = OpenAI(
-    base_url="https://openrouter.ai/api/v1",
-    api_key=openrouter_api_key,
-    timeout=25,
-) if openrouter_api_key else None
-AI_MODEL = os.getenv("OPENROUTER_MODEL", "openrouter/free")
 
 
 SUBJECT_FALLBACK_QUESTIONS = {
@@ -103,11 +105,36 @@ SUBJECT_FALLBACK_QUESTIONS = {
 }
 
 
-def extract_json(content: str):
-    match = re.search(r"\{[\s\S]*\}", content or "")
-    if not match:
-        raise ValueError("AI response does not contain JSON")
-    return json.loads(match.group())
+def save_progress_after_test(user_id: int, subject_id: str, exam_score: int, score_delta_base: int | None = None):
+    prev = get_user_progress(user_id, subject_id) or {"score": 0, "chart": []}
+    prev_score = prev.get("score", 0)
+    chart = list(prev.get("chart", []) or [])
+    chart.append(exam_score)
+    if len(chart) > 14:
+        chart = chart[-14:]
+    score_delta = exam_score - prev_score if score_delta_base is None else score_delta_base
+    upsert_user_progress(
+        user_id,
+        subject_id,
+        score=exam_score,
+        score_delta=score_delta,
+        chart=chart,
+    )
+
+
+def update_streak(user_id: int):
+    settings = get_user_settings(user_id) or {}
+    last_active = settings.get("last_active_date")
+    today = datetime.date.today()
+    try:
+        last_date = datetime.date.fromisoformat(last_active) if last_active else None
+    except Exception:
+        last_date = None
+    if last_date and (today - last_date).days == 1:
+        streak = (settings.get("streak") or 0) + 1
+    else:
+        streak = 1
+    update_user_settings(user_id, streak=streak, last_active_date=today.isoformat())
 
 
 def normalize_questions(data: dict, subject_id: str, topic: str, count: int = 5):
@@ -254,8 +281,6 @@ def fallback_analysis(subject_id: str, subject_name: str, answers: list[dict]):
         if not a.get("correct")
     ]
     gaps = list(dict.fromkeys([str(t).strip() for t in wrong_topics if str(t).strip()]))
-    if not gaps and score < 90:
-        gaps = data_service.get_plan_topics(subject_id)[:2]
     level = "сильный" if score >= 80 else "средний" if score >= 50 else "начальный"
     analysis = (
         f"Результат по предмету «{subject_name}»: {correct_count} из {total} "
@@ -265,7 +290,14 @@ def fallback_analysis(subject_id: str, subject_name: str, answers: list[dict]):
         analysis += "В план добавлены темы, которые стоит подтянуть в первую очередь."
     else:
         analysis += "Явных пробелов не видно, можно переходить к задачам повышенной сложности."
-    return {"analysis": analysis, "gaps": gaps, "score": score, "level": level}
+    return {
+        "analysis": analysis,
+        "gaps": gaps,
+        "score": score,
+        "examScore": round(score * 0.9),
+        "level": level,
+        "breakdowns": [],
+    }
 
 
 @app.get("/api/health")
@@ -376,32 +408,121 @@ def get_user():
 def dashboard():
     subject_id = request.args.get("subjectId") or data_service.get_active_subject_id()
     email = request.args.get("email")
-    data = data_service.get_dashboard(subject_id)
-    if not data:
-        return jsonify({"error": "Subject not found"}), 404
-
-    # If user email provided, overlay DB-stored progress and settings
+    topic_overrides = None
+    stored_topics = None
+    user_id = None
     if email:
         user = get_user_by_email(email)
         if user:
             user_id = user["id"]
-            progress = get_user_progress(user_id, subject_id) or {"score": 0, "score_delta": 0, "chart": []}
-            settings = get_user_settings(user_id) or {}
-            data["score"] = progress.get("score", 0)
-            data["scoreDelta"] = progress.get("score_delta", 0)
-            data["chart"] = [{"day": i + 1, "score": v} for i, v in enumerate(progress.get("chart", []))]
-            data["streak"] = settings.get("streak", 0)
-            data["achievements"] = settings.get("achievements", 0)
+            topic_overrides = get_topic_progress(user_id, subject_id)
+            stored_topics = get_user_plan_topics(user_id, subject_id)
+
+    completed_task_ids = None
+    subject_task_stats = None
+    if email and user_id:
+        settings = get_user_settings(user_id) or {}
+        completed_task_ids = settings.get("completed_task_ids") or []
+        subject_task_stats = get_subject_task_progress(user_id, subject_id)
+
+    data = data_service.get_dashboard(
+        subject_id,
+        topic_overrides=topic_overrides,
+        stored_topics=stored_topics,
+        completed_task_ids=completed_task_ids,
+        subject_task_stats=subject_task_stats,
+    )
+    if not data:
+        return jsonify({"error": "Subject not found"}), 404
+
+    if email and user_id:
+        progress = get_user_progress(user_id, subject_id)
+        if not progress:
+            progress = {"score": 0, "score_delta": 0, "chart": []}
+        settings = get_user_settings(user_id) or {}
+        data["score"] = progress.get("score", 0)
+        data["scoreDelta"] = progress.get("score_delta", 0)
+        chart_data = progress.get("chart", []) or []
+        data["chart"] = [
+            {"day": i + 1, "score": int(v) if v is not None else 0}
+            for i, v in enumerate(chart_data)
+        ]
+        data["streak"] = settings.get("streak", 0)
+        data["achievements"] = settings.get("achievements", 0)
     return jsonify(data)
 
 
 @app.get("/api/plan")
 def plan():
     subject_id = request.args.get("subjectId") or data_service.get_active_subject_id()
-    data = data_service.get_plan(subject_id)
+    email = request.args.get("email")
+    topic_overrides = None
+    stored_topics = None
+    if email:
+        user = get_user_by_email(email)
+        if user:
+            topic_overrides = get_topic_progress(user["id"], subject_id)
+            stored_topics = get_user_plan_topics(user["id"], subject_id)
+    data = data_service.get_plan(
+        subject_id,
+        topic_overrides=topic_overrides,
+        stored_topics=stored_topics,
+    )
     if not data:
         return jsonify({"error": "Plan not found"}), 404
     return jsonify(data)
+
+
+@app.patch("/api/plan/topics/<topic_id>")
+def update_plan_topic(topic_id: str):
+    body = request.get_json(silent=True) or {}
+    email = body.get("email") or request.args.get("email")
+    subject_id = body.get("subjectId") or request.args.get("subjectId") or data_service.get_active_subject_id()
+    status = (body.get("status") or "").strip()
+    progress = body.get("progress")
+
+    if not email:
+        return jsonify({"error": "email required"}), 400
+    if status not in ("completed", "in-progress", "pending"):
+        return jsonify({"error": "status must be completed, in-progress or pending"}), 400
+
+    user = get_user_by_email(email)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    try:
+        progress_value = int(progress) if progress is not None else None
+    except (TypeError, ValueError):
+        return jsonify({"error": "progress must be a number"}), 400
+
+    set_topic_progress(
+        user["id"],
+        subject_id,
+        topic_id,
+        status=status,
+        progress=progress_value,
+    )
+    update_plan_topic_entry(
+        user["id"],
+        subject_id,
+        topic_id,
+        status=status,
+        progress=progress_value,
+    )
+    data_service.update_topic_status(
+        subject_id,
+        topic_id,
+        status,
+        progress=progress_value,
+    )
+    plan = data_service.get_plan(
+        subject_id,
+        topic_overrides=get_topic_progress(user["id"], subject_id),
+        stored_topics=get_user_plan_topics(user["id"], subject_id),
+    )
+    if not plan:
+        return jsonify({"error": "Plan not found"}), 404
+    return jsonify(plan)
 
 
 @app.get("/api/tasks")
@@ -444,11 +565,16 @@ def get_task(task_id):
 def check_task(task_id):
     body = request.get_json(silent=True) or {}
     answer_id = body.get("answerId")
+    email = body.get("email") or request.args.get("email")
     if answer_id is None:
         return jsonify({"error": "answerId required"}), 400
     result = data_service.check_answer(task_id, int(answer_id))
     if not result:
         return jsonify({"error": "Task not found"}), 404
+    if result.get("correct") and email:
+        user = get_user_by_email(email)
+        if user:
+            add_completed_task(user["id"], task_id)
     return jsonify(result)
 
 
@@ -481,12 +607,10 @@ def generate_task():
     plan_topics = data_service.get_plan_topics(subject_id)
     topic = requested_topic or (plan_topics[0] if plan_topics else "ключевые темы")
 
-    if client:
+    if is_ai_available():
         try:
-            response = client.chat.completions.create(
-                model=AI_MODEL,
-                max_tokens=900,
-                messages=[
+            content = chat_completion(
+                [
                     {
                         "role": "system",
                         "content": (
@@ -519,8 +643,8 @@ def generate_task():
 }}""",
                     },
                 ],
+                max_tokens=900,
             )
-            content = response.choices[0].message.content or ""
             task = normalize_generated_task(extract_json(content), subject_id, topic)
         except Exception:
             task = fallback_generated_task(subject_id, subject_name, topic)
@@ -540,58 +664,52 @@ def chat():
     if not message:
         return jsonify({"error": "message required"}), 400
     
-    if not client:
+    if not is_ai_available():
         return jsonify(
             {
                 "error": (
-                    "AI-чат не настроен: добавьте OPENROUTER_API_KEY в backend/.env "
+                    "AI-чат не настроен: добавьте MISTRAL_API_KEY в backend/.env "
                     "и перезапустите backend."
                 )
             }
         ), 503
 
-    if client:
-        try:
-            subject = data_service.get_subject(subject_id)
-            subject_name = subject["name"] if subject else "предмету"
-            
-            topics = ", ".join(data_service.get_plan_topics(subject_id)[:6])
-            response = client.chat.completions.create(
-                model=AI_MODEL,
-                max_tokens=900,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": (
-                            "Ты AI-репетитор для подготовки к ЕГЭ. Отвечай на русском, "
-                            "кратко, понятно и по делу. Если студент просит тест, предложи "
-                            "нажать «Начать занятие» на главной для диагностики и плана."
-                        ),
-                    },
-                    {
-                        "role": "user",
-                        "content": (
-                            f"Предмет: {subject_name}. Темы плана: {topics or 'не заданы'}.\n"
-                            f"Вопрос студента: {message}"
-                        ),
-                    }
-                ]
-            )
-            
-            reply = (response.choices[0].message.content or "").strip()
-            if not reply:
-                raise ValueError("empty AI response")
-            return jsonify({"role": "assistant", "content": reply})
-            
-        except Exception:
-            return jsonify(
+    try:
+        subject = data_service.get_subject(subject_id)
+        subject_name = subject["name"] if subject else "предмету"
+        topics = ", ".join(data_service.get_plan_topics(subject_id)[:6])
+        task_context = (body.get("taskContext") or "").strip()
+        user_content = (
+            f"Предмет: {subject_name}. Темы плана: {topics or 'не заданы'}.\n"
+            f"Вопрос студента: {message}"
+        )
+        if task_context:
+            user_content += f"\n\nКонтекст задачи из теста:\n{task_context}"
+
+        reply = chat_completion(
+            [
                 {
-                    "error": (
-                        "AI-чат сейчас не смог получить ответ от модели. "
-                        "Проверьте OPENROUTER_API_KEY, модель OPENROUTER_MODEL и доступ backend к OpenRouter."
-                    )
-                }
-            ), 502
+                    "role": "system",
+                    "content": (
+                        "Ты AI-репетитор для подготовки к ЕГЭ. Отвечай на русском, "
+                        "кратко, понятно и по делу. Если студент просит тест, предложи "
+                        "составить диагностику на главной."
+                    ),
+                },
+                {"role": "user", "content": user_content},
+            ],
+            max_tokens=900,
+        )
+        return jsonify({"role": "assistant", "content": reply})
+    except Exception:
+        return jsonify(
+            {
+                "error": (
+                    "AI-чат не смог получить ответ. Проверьте MISTRAL_API_KEY, "
+                    "MISTRAL_MODEL и доступ backend к Mistral API."
+                )
+            }
+        ), 502
 
 
 @app.get("/api/chat/suggestions")
@@ -619,262 +737,37 @@ def generate_test():
         or request.args.get("subjectId")
         or data_service.get_active_subject_id()
     )
-    
-    # If multiple subjects provided, generate combined test
-    if subject_ids and isinstance(subject_ids, list):
-        return generate_multi_subject_test(subject_ids, body)
-    
-    topic = body.get("topic") or request.args.get("topic") or "диагностика по предмету"
-    count = int(body.get("count") or request.args.get("count") or 5)
-    count = max(3, min(count, 12))
-    subject = data_service.get_subject(subject_id)
-    subject_name = subject["name"] if subject else "предмету"
-    plan_topics = data_service.get_plan_topics(subject_id)[:8]
-    
-    if not client:
-        return jsonify(fallback_test(subject_id, subject_name, topic, count))
-    
+
     try:
-        prompt = f"""Сгенерируй диагностический тест по предмету "{subject_name}" для подготовки к ЕГЭ.
-Тест должен показать, насколько ученик разбирается в предмете, и найти темы, которые нужно подтянуть.
-Охвати разные темы из списка: {", ".join(plan_topics) or topic}.
-Сделай ровно {count} вопросов разной сложности.
-Весь текст вопросов, тем и ответов должен быть на русском языке, кроме формул.
-        
-Формат ответа (строго в JSON):
-{{
-  "questions": [
-    {{
-      "topic": "тема вопроса",
-      "question": "текст вопроса",
-      "answers": ["ответ1", "ответ2", "ответ3", "ответ4"],
-      "correctIndex": 0
-    }}
-  ]
-}}
-
-Не добавляй пояснения вне JSON."""
-
-        response = client.chat.completions.create(
-            model=AI_MODEL,
-            max_tokens=1200,
-            messages=[
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ]
-        )
-        
-        content = response.choices[0].message.content or ""
-        return jsonify(normalize_questions(extract_json(content), subject_id, topic, count))
-        
-    except Exception as e:
-        return jsonify(fallback_test(subject_id, subject_name, topic, count))
-
-
-def generate_multi_subject_test(subject_ids: list, body: dict):
-    """Generate a diagnostic test covering multiple subjects."""
-    topic = body.get("topic") or "комплексная диагностика"
-    count_per_subject = int(body.get("count") or 3)
-    count_per_subject = max(2, min(count_per_subject, 5))
-    
-    all_questions = []
-    subjects_info = []
-    
-    for subject_id in subject_ids:
-        subject = data_service.get_subject(subject_id)
-        if not subject:
-            continue
-        subject_name = subject["name"]
-        plan_topics = data_service.get_plan_topics(subject_id)[:4]
-        subjects_info.append(f"{subject_name}: {', '.join(plan_topics[:3])}")
-        
-        if not client:
-            test = fallback_test(subject_id, subject_name, topic, count_per_subject)
-            all_questions.extend(test.get("questions", []))
-        else:
-            try:
-                prompt = f"""Сгенерируй {count_per_subject} диагностических вопросов по предмету "{subject_name}" для подготовки к ЕГЭ.
-Охвати темы: {", ".join(plan_topics) or topic}.
-Весь текст вопросов, тем и ответов должен быть на русском языке, кроме формул.
-                
-Формат ответа (строго в JSON):
-{{
-  "questions": [
-    {{
-      "topic": "тема вопроса",
-      "question": "текст вопроса",
-      "answers": ["ответ1", "ответ2", "ответ3", "ответ4"],
-      "correctIndex": 0
-    }}
-  ]
-}}
-
-Не добавляй пояснения вне JSON."""
-
-                response = client.chat.completions.create(
-                    model=AI_MODEL,
-                    max_tokens=800,
-                    messages=[{"role": "user", "content": prompt}]
+        if subject_ids and isinstance(subject_ids, list):
+            topic = body.get("topic") or "комплексная диагностика"
+            count_per_subject = int(body.get("count") or 3)
+            for sid in subject_ids:
+                ensure_problem_bank(sid)
+            return jsonify(
+                generate_multi_subject_test(
+                    subject_ids,
+                    topic=topic,
+                    count_per_subject=count_per_subject,
                 )
-                
-                content = response.choices[0].message.content or ""
-                test_data = normalize_questions(extract_json(content), subject_id, topic, count_per_subject)
-                all_questions.extend(test_data.get("questions", []))
-                
-            except Exception:
-                test = fallback_test(subject_id, subject_name, topic, count_per_subject)
-                all_questions.extend(test.get("questions", []))
-    
-    return jsonify({
-        "topic": f"Комплексная диагностика по {len(subject_ids)} предметам",
-        "questions": all_questions,
-        "subjects": subjects_info
-    })
-
-
-def analyze_multi_subject_test(subject_ids: list, answers: list, email: str = None):
-    """Analyze test results for multiple subjects."""
-    all_gaps = []
-    all_scores = []
-    analyses = []
-    
-    subject_scores = {}
-    for subject_id in subject_ids:
-        subject = data_service.get_subject(subject_id)
-        if not subject:
-            continue
-        subject_name = subject["name"]
-        
-        # Filter answers for this subject (by topic matching)
-        subject_answers = [
-            a for a in answers
-            if a.get('topic') or any(topic in a.get('question', '') for topic in data_service.get_plan_topics(subject_id)[:5])
-        ]
-        
-        if not subject_answers:
-            continue
-        
-        if not client:
-            analysis_data = fallback_analysis(subject_id, subject_name, subject_answers)
-            subject_scores[subject_id] = analysis_data.get("score", 0)
-            all_gaps.extend(analysis_data.get("gaps", []))
-            all_scores.append(analysis_data.get("score", 0))
-            analyses.append(f"{subject_name}: {analysis_data.get('analysis', '')}")
-            data_service.update_plan_from_gaps(
-                subject_id, analysis_data["gaps"], analysis_data["analysis"]
             )
-        else:
-            try:
-                answers_text = "\n".join([
-                    (
-                        f"- Тема: {a.get('topic', 'не указана')}; "
-                        f"вопрос: {a.get('question', 'Вопрос')}; "
-                        f"ответ ученика: {a.get('selectedAnswer', 'не указан')}; "
-                        f"правильный ответ: {a.get('correctAnswer', 'не указан')}; "
-                        f"результат: {'Правильно' if a.get('correct') else 'Неправильно'}"
-                    )
-                    for a in subject_answers
-                ])
-                
-                prompt = f"""Проанализируй результаты теста по предмету "{subject_name}".
 
-Результаты:
-{answers_text}
-
-Формат ответа (строго в JSON):
-{{
-  "analysis": "краткий анализ результатов и рекомендации",
-  "gaps": ["список конкретных тем с пробелами в знаниях"],
-  "score": 0,
-  "level": "начальный|средний|сильный"
-}}
-
-Верни только темы, которые действительно стоит подтянуть. Не добавляй пояснения вне JSON."""
-
-                response = client.chat.completions.create(
-                    model=AI_MODEL,
-                    max_tokens=700,
-                    messages=[{"role": "user", "content": prompt}]
-                )
-                
-                content = response.choices[0].message.content or ""
-                analysis_data = extract_json(content)
-                if not isinstance(analysis_data.get("gaps"), list):
-                    analysis_data["gaps"] = []
-                if "score" not in analysis_data or "level" not in analysis_data:
-                    fallback = fallback_analysis(subject_id, subject_name, subject_answers)
-                    analysis_data.setdefault("score", fallback["score"])
-                    analysis_data.setdefault("level", fallback["level"])
-                
-                subject_scores[subject_id] = analysis_data.get("score", 0)
-                all_gaps.extend(analysis_data.get("gaps", []))
-                all_scores.append(analysis_data.get("score", 0))
-                analyses.append(f"{subject_name}: {analysis_data.get('analysis', '')}")
-                data_service.update_plan_from_gaps(
-                    subject_id, analysis_data.get("gaps", []), analysis_data.get("analysis", "")
-                )
-                
-            except Exception:
-                analysis_data = fallback_analysis(subject_id, subject_name, subject_answers)
-                subject_scores[subject_id] = analysis_data.get("score", 0)
-                all_gaps.extend(analysis_data.get("gaps", []))
-                all_scores.append(analysis_data.get("score", 0))
-                analyses.append(f"{subject_name}: {analysis_data.get('analysis', '')}")
-                data_service.update_plan_from_gaps(
-                    subject_id, analysis_data["gaps"], analysis_data["analysis"]
-                )
-    
-    # Calculate overall score and level
-    avg_score = round(sum(all_scores) / len(all_scores)) if all_scores else 0
-    level = "сильный" if avg_score >= 80 else "средний" if avg_score >= 50 else "начальный"
-    
-    # Remove duplicate gaps
-    unique_gaps = list(dict.fromkeys([str(g).strip() for g in all_gaps if str(g).strip()]))
-    
-    combined_analysis = (
-        f"Комплексный результат по {len(subject_ids)} предметам: средний балл {avg_score}%. "
-        f"Уровень: {level}. " + ". ".join(analyses)
-    )
-    
-    # Persist per-user progress if email provided
-    if email:
-        user = get_user_by_email(email)
-        if user:
-            user_id = user["id"]
-            try:
-                for sid, score in subject_scores.items():
-                    prev = get_user_progress(user_id, sid) or {"score": 0, "chart": []}
-                    prev_score = prev.get("score", 0)
-                    chart = prev.get("chart", []) or []
-                    chart.append(score)
-                    score_delta = score - prev_score
-                    upsert_user_progress(user_id, sid, score=score, score_delta=score_delta, chart=chart)
-
-                # Update streak and last active
-                settings = get_user_settings(user_id) or {}
-                last_active = settings.get("last_active_date")
-                today = datetime.date.today()
-                try:
-                    last_date = datetime.date.fromisoformat(last_active) if last_active else None
-                except Exception:
-                    last_date = None
-                if last_date and (today - last_date).days == 1:
-                    streak = (settings.get("streak") or 0) + 1
-                else:
-                    streak = 1
-                update_user_settings(user_id, streak=streak, last_active_date=today.isoformat())
-            except Exception:
-                pass
-
-    return jsonify({
-        "analysis": combined_analysis,
-        "gaps": unique_gaps[:10],  # Limit to top 10 gaps
-        "score": avg_score,
-        "level": level,
-        "subjects": analyses
-    })
+        topic = body.get("topic") or request.args.get("topic") or "диагностика по предмету"
+        topic_name = (body.get("topicName") or request.args.get("topicName") or "").strip() or None
+        count = int(body.get("count") or request.args.get("count") or 5)
+        count = max(1, min(count, 12))
+        return jsonify(
+            run_generate_test(
+                subject_id,
+                topic=topic,
+                count=count,
+                topic_name=topic_name,
+            )
+        )
+    except ProblemBankError as exc:
+        return jsonify({"error": str(exc)}), 503
+    except Exception as exc:
+        return jsonify({"error": f"Не удалось составить тест: {exc}"}), 500
 
 
 @app.post("/api/analyze-test")
@@ -882,139 +775,106 @@ def analyze_test():
     body = request.get_json(silent=True) or {}
     email = body.get("email") or request.args.get("email")
     subject_ids = body.get("subjectIds")
-    subject_id = request.args.get("subjectId") or data_service.get_active_subject_id()
+    subject_id = body.get("subjectId") or request.args.get("subjectId") or data_service.get_active_subject_id()
     answers = body.get("answers", [])
-    
-    # If multiple subjects provided, analyze for each subject separately
+
     if subject_ids and isinstance(subject_ids, list):
-        return analyze_multi_subject_test(subject_ids, answers, email)
-    
+        analysis_data = run_multi_analysis(subject_ids, answers)
+        user = get_user_by_email(email) if email else None
+        if user:
+            user_id = user["id"]
+            try:
+                for sid in subject_ids:
+                    subject_answers = [a for a in answers if a.get("subjectId") == sid]
+                    if not subject_answers:
+                        continue
+                    sub_result = run_test_analysis(sid, subject_answers)
+                    data_service.update_plan_from_gaps(
+                        sid,
+                        sub_result.get("gaps", []),
+                        sub_result.get("analysis", ""),
+                        user_id=user_id,
+                    )
+                    save_progress_after_test(
+                        user_id,
+                        sid,
+                        int(sub_result.get("examScore") or sub_result.get("score") or 0),
+                    )
+                    record_test_task_progress(
+                        user_id,
+                        sid,
+                        correct_count=sum(1 for a in subject_answers if a.get("correct")),
+                        total_count=len(subject_answers),
+                        plan_topic_count=len(get_user_plan_topics(user_id, sid)),
+                    )
+                update_streak(user_id)
+            except Exception:
+                pass
+        else:
+            for sid in subject_ids:
+                subject_answers = [a for a in answers if a.get("subjectId") == sid]
+                if not subject_answers:
+                    continue
+                sub_result = run_test_analysis(sid, subject_answers)
+                data_service.update_plan_from_gaps(
+                    sid,
+                    sub_result.get("gaps", []),
+                    sub_result.get("analysis", ""),
+                )
+                data_service.record_test_task_progress(
+                    sid,
+                    correct_count=sum(1 for a in subject_answers if a.get("correct")),
+                    total_count=len(subject_answers),
+                    plan_topic_count=0,
+                )
+        return jsonify(analysis_data)
+
     subject = data_service.get_subject(subject_id)
     subject_name = subject["name"] if subject else "предмету"
-    
-    if not client:
-        analysis_data = fallback_analysis(subject_id, subject_name, answers)
-        data_service.update_plan_from_gaps(
-            subject_id, analysis_data["gaps"], analysis_data["analysis"]
-        )
 
-        # Persist to DB if user email provided
-        if email:
-            user = get_user_by_email(email)
-            if user:
-                user_id = user["id"]
-                try:
-                    prev = get_user_progress(user_id, subject_id) or {"score": 0, "chart": []}
-                    prev_score = prev.get("score", 0)
-                    chart = prev.get("chart", []) or []
-                    chart.append(analysis_data.get("score", 0))
-                    score_delta = analysis_data.get("score", 0) - prev_score
-                    upsert_user_progress(user_id, subject_id, score=analysis_data.get("score", 0), score_delta=score_delta, chart=chart)
-
-                    settings = get_user_settings(user_id) or {}
-                    last_active = settings.get("last_active_date")
-                    today = datetime.date.today()
-                    try:
-                        last_date = datetime.date.fromisoformat(last_active) if last_active else None
-                    except Exception:
-                        last_date = None
-                    if last_date and (today - last_date).days == 1:
-                        streak = (settings.get("streak") or 0) + 1
-                    else:
-                        streak = 1
-                    update_user_settings(user_id, streak=streak, last_active_date=today.isoformat())
-                except Exception:
-                    pass
-
-        return jsonify(analysis_data)
-    
     try:
-        # Analyze test results using AI
-        answers_text = "\n".join([
-            (
-                f"- Тема: {a.get('topic', 'не указана')}; "
-                f"вопрос: {a.get('question', 'Вопрос')}; "
-                f"ответ ученика: {a.get('selectedAnswer', 'не указан')}; "
-                f"правильный ответ: {a.get('correctAnswer', 'не указан')}; "
-                f"результат: {'Правильно' if a.get('correct') else 'Неправильно'}"
-            )
-            for a in answers
-        ])
-        
-        prompt = f"""Проанализируй результаты теста по предмету "{subject_name}".
-
-Результаты:
-{answers_text}
-
-Формат ответа (строго в JSON):
-{{
-  "analysis": "краткий анализ результатов и рекомендации",
-  "gaps": ["список конкретных тем с пробелами в знаниях"],
-  "score": 0,
-  "level": "начальный|средний|сильный"
-}}
-
-Верни только темы, которые действительно стоит подтянуть. Не добавляй пояснения вне JSON."""
-
-        response = client.chat.completions.create(
-            model=AI_MODEL,
-            max_tokens=700,
-            messages=[
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ]
-        )
-        
-        content = response.choices[0].message.content or ""
-        analysis_data = extract_json(content)
-        if not isinstance(analysis_data.get("gaps"), list):
-            analysis_data["gaps"] = []
-        if "score" not in analysis_data or "level" not in analysis_data:
-            fallback = fallback_analysis(subject_id, subject_name, answers)
-            analysis_data.setdefault("score", fallback["score"])
-            analysis_data.setdefault("level", fallback["level"])
-        data_service.update_plan_from_gaps(
-            subject_id, analysis_data.get("gaps", []), analysis_data.get("analysis", "")
-        )
-
-        # Persist to DB if user email provided
-        if email:
-            user = get_user_by_email(email)
-            if user:
-                user_id = user["id"]
-                try:
-                    prev = get_user_progress(user_id, subject_id) or {"score": 0, "chart": []}
-                    prev_score = prev.get("score", 0)
-                    chart = prev.get("chart", []) or []
-                    chart.append(analysis_data.get("score", 0))
-                    score_delta = analysis_data.get("score", 0) - prev_score
-                    upsert_user_progress(user_id, subject_id, score=analysis_data.get("score", 0), score_delta=score_delta, chart=chart)
-
-                    settings = get_user_settings(user_id) or {}
-                    last_active = settings.get("last_active_date")
-                    today = datetime.date.today()
-                    try:
-                        last_date = datetime.date.fromisoformat(last_active) if last_active else None
-                    except Exception:
-                        last_date = None
-                    if last_date and (today - last_date).days == 1:
-                        streak = (settings.get("streak") or 0) + 1
-                    else:
-                        streak = 1
-                    update_user_settings(user_id, streak=streak, last_active_date=today.isoformat())
-                except Exception:
-                    pass
-
-        return jsonify(analysis_data)
-        
-    except Exception as e:
+        analysis_data = run_test_analysis(subject_id, answers, subject_name=subject_name)
+    except Exception:
         analysis_data = fallback_analysis(subject_id, subject_name, answers)
-        data_service.update_plan_from_gaps(
-            subject_id, analysis_data["gaps"], analysis_data["analysis"]
+        analysis_data["examScore"] = analysis_data.get("score", 0)
+        analysis_data["breakdowns"] = []
+
+    user = get_user_by_email(email) if email else None
+    data_service.update_plan_from_gaps(
+        subject_id,
+        analysis_data.get("gaps", []),
+        analysis_data.get("analysis", ""),
+        user_id=user["id"] if user else None,
+    )
+
+    correct_count = sum(1 for a in answers if a.get("correct"))
+    total_count = len(answers)
+    plan_topic_count = 0
+    if user:
+        user_id = user["id"]
+        plan_topic_count = len(get_user_plan_topics(user_id, subject_id))
+        try:
+            exam_score = int(analysis_data.get("examScore") or analysis_data.get("score") or 0)
+            save_progress_after_test(user_id, subject_id, exam_score)
+            update_streak(user_id)
+            record_test_task_progress(
+                user_id,
+                subject_id,
+                correct_count=correct_count,
+                total_count=total_count,
+                plan_topic_count=plan_topic_count,
+            )
+        except Exception:
+            pass
+    else:
+        data_service.record_test_task_progress(
+            subject_id,
+            correct_count=correct_count,
+            total_count=total_count,
+            plan_topic_count=plan_topic_count,
         )
-        return jsonify(analysis_data)
+
+    return jsonify(analysis_data)
 
 
 if __name__ == "__main__":

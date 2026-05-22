@@ -10,12 +10,24 @@ import {
   Check,
   X as XIcon,
 } from 'lucide-react';
-import { api, getAiTestData, clearAiTestData } from '../api/client';
+import {
+  api,
+  getAiTestData,
+  setAiTestData,
+  clearAiTestData,
+  getTestResults,
+  saveTestResults,
+  clearTestResults,
+  notifyTestComplete,
+} from '../api/client';
 import { useApp } from '../context/AppContext';
-import type { AiTestAnalysis, AiTestAnswer, AiTestData, Task, TaskCheckResult } from '../types';
+import type { AiTestAnalysis, AiTestAnswer, AiTestBreakdown, AiTestData, Task, TaskCheckResult } from '../types';
 
 export default function TaskScreen() {
-  const { activeSubjectId, taskSessionKey, account } = useApp();
+  const { activeSubjectId, taskSessionKey, account, onNavigateToChat, setActiveSubject } = useApp();
+  const [generatingTest, setGeneratingTest] = useState(false);
+  const [testQuestionCount, setTestQuestionCount] = useState(5);
+  const [testError, setTestError] = useState<string | null>(null);
   const [task, setTask] = useState<Task | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
@@ -59,26 +71,67 @@ export default function TaskScreen() {
   );
 
   useEffect(() => {
-    // Check if there's AI-generated test data
+    const savedResults = getTestResults();
+    if (savedResults) {
+      setAnalysis(savedResults.analysis);
+      setTestAnswers(savedResults.answers);
+      setShowAnalysis(true);
+      setLoading(false);
+      return;
+    }
+
     const aiData = getAiTestData();
     if (aiData) {
       setAiTest(aiData);
       setLoading(false);
     } else {
-      loadTask();
-      api
-        .listTasks(activeSubjectId)
-        .then((d) => setTaskList(d.tasks))
-        .catch(() => setTaskList([]));
+      setTask(null);
+      setLoading(false);
     }
-  }, [activeSubjectId, taskSessionKey, loadTask]);
+  }, [activeSubjectId, taskSessionKey]);
+
+  const handleGenerateTestFromBank = async () => {
+    setGeneratingTest(true);
+    setTestError(null);
+    setShowAnalysis(false);
+    setAnalysis(null);
+    setTestAnswers([]);
+    setCurrentQuestionIndex(0);
+    clearAiTestData();
+    clearTestResults();
+    try {
+      await setActiveSubject(activeSubjectId);
+      const test = await api.generateTest(
+        activeSubjectId,
+        'диагностика по предмету',
+        testQuestionCount
+      );
+      if (!test.questions?.length) {
+        throw new Error('Не удалось загрузить задания для теста');
+      }
+      setAiTestData(test);
+      setAiTest(test);
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Не удалось загрузить задания. Проверьте интернет и работу сервера.';
+      setTestError(message);
+      console.error('Failed to generate test from bank:', error);
+    } finally {
+      setGeneratingTest(false);
+    }
+  };
 
   const handleCheck = async () => {
     if (!task || selectedAnswer === null) return;
     setChecking(true);
     try {
-      const result = await api.checkTask(task.id, selectedAnswer);
+      const result = await api.checkTask(task.id, selectedAnswer, account.email);
       setCheckResult(result);
+      if (result.correct) {
+        notifyTestComplete();
+      }
     } finally {
       setChecking(false);
     }
@@ -131,11 +184,12 @@ export default function TaskScreen() {
   };
 
   const handleAiTestAnswer = (answerIndex: number) => {
-    if (!aiTest) return;
-    
+    if (!aiTest || analyzing) return;
+
     const currentQuestion = aiTest.questions[currentQuestionIndex];
     const isCorrect = answerIndex === currentQuestion.correctIndex;
-    
+    const isLastQuestion = currentQuestionIndex >= aiTest.questions.length - 1;
+
     const newAnswers = [
       ...testAnswers,
       {
@@ -144,41 +198,83 @@ export default function TaskScreen() {
         selectedAnswer: currentQuestion.answers[answerIndex],
         correctAnswer: currentQuestion.answers[currentQuestion.correctIndex],
         correct: isCorrect,
+        subjectId: currentQuestion.subjectId || aiTest.subjectId || activeSubjectId,
+        problemId: currentQuestion.problemId,
       },
     ];
     setTestAnswers(newAnswers);
-    
-    if (currentQuestionIndex < aiTest.questions.length - 1) {
+
+    if (!isLastQuestion) {
       setCurrentQuestionIndex(currentQuestionIndex + 1);
-    } else {
-      // Test completed, analyze results
-      analyzeResults(newAnswers);
+      return;
     }
+
+    setAnalyzing(true);
+    analyzeResults(newAnswers);
   };
 
   const analyzeResults = async (answers: AiTestAnswer[]) => {
-    setAnalyzing(true);
     try {
-      const subjectIds = aiTest?.subjects;
-      const result = await api.analyzeTestResults(activeSubjectId, answers, subjectIds, account.email);
+      const multiIds = aiTest?.subjectIds;
+      const result = await api.analyzeTestResults(
+        activeSubjectId,
+        answers,
+        multiIds,
+        account.email
+      );
       setAnalysis(result);
       setShowAnalysis(true);
+      saveTestResults({ analysis: result, answers });
+      notifyTestComplete();
     } catch (error) {
       console.error('Failed to analyze test:', error);
       const correct = answers.filter((answer) => answer.correct).length;
+      const percent = answers.length ? Math.round((correct / answers.length) * 100) : 0;
       const gaps = Array.from(
         new Set(answers.filter((answer) => !answer.correct).map((answer) => answer.topic))
       );
-      setAnalysis({
-        analysis: `Вы правильно ответили на ${correct} из ${answers.length}. Повторите темы, где были ошибки, и вернитесь к диагностике позже.`,
+      const fallback: AiTestAnalysis = {
+        analysis: `Вы правильно ответили на ${correct} из ${answers.length}. Повторите темы, где были ошибки.`,
         gaps,
-        score: answers.length ? Math.round((correct / answers.length) * 100) : 0,
-        level: correct >= answers.length * 0.8 ? 'сильный' : correct >= answers.length * 0.5 ? 'средний' : 'начальный',
-      });
+        score: percent,
+        examScore: Math.round(percent * 0.9),
+        level:
+          correct >= answers.length * 0.8
+            ? 'сильный'
+            : correct >= answers.length * 0.5
+              ? 'средний'
+              : 'начальный',
+        breakdowns: answers
+          .filter((answer) => !answer.correct)
+          .map((answer) => ({
+            question: answer.question,
+            topic: answer.topic,
+            explanation: `Правильный ответ: ${answer.correctAnswer}`,
+            chatPrompt: `Разбери задачу: ${answer.question}. Мой ответ: ${answer.selectedAnswer}.`,
+          })),
+      };
+      setAnalysis(fallback);
       setShowAnalysis(true);
+      saveTestResults({ analysis: fallback, answers });
+      notifyTestComplete();
     } finally {
       setAnalyzing(false);
     }
+  };
+
+  const getBreakdownForAnswer = (answer: AiTestAnswer, index: number): AiTestBreakdown | null => {
+    if (answer.correct) return null;
+    const fromAnalysis = analysis?.breakdowns?.find(
+      (item) => item.question === answer.question || item.topic === answer.topic
+    );
+    if (fromAnalysis) return fromAnalysis;
+    return {
+      question: answer.question,
+      topic: answer.topic,
+      explanation: `Правильный ответ: ${answer.correctAnswer}`,
+      chatPrompt: `Разбери подробно задачу по теме «${answer.topic}»: ${answer.question}. Мой ответ: ${answer.selectedAnswer}. Правильный: ${answer.correctAnswer}.`,
+      subjectId: answer.subjectId || activeSubjectId,
+    };
   };
 
   if (loading && !task && !aiTest) {
@@ -189,10 +285,56 @@ export default function TaskScreen() {
     );
   }
 
+  if (generatingTest) {
+    return (
+      <div className="h-full flex items-center justify-center bg-[#F3F4F6]">
+        <div className="bg-white rounded-2xl p-8 shadow-sm border border-border text-center max-w-sm">
+          <Loader2 className="size-12 animate-spin text-[#6D3DF5] mx-auto mb-4" />
+          <h3 className="font-semibold text-lg mb-2">Составляем тест из банка</h3>
+          <p className="text-sm text-muted-foreground">
+            Загружаем {testQuestionCount} задач и формируем варианты ответов
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   if (!task && !aiTest) {
     return (
-      <div className="h-full flex flex-col items-center justify-center gap-4 p-6 text-center">
-        <p className="text-muted-foreground">Задания не найдены. Запустите Flask: npm run backend</p>
+      <div className="h-full flex flex-col items-center justify-center gap-6 p-6 text-center bg-[#F3F4F6]">
+        <div className="bg-white rounded-2xl p-8 shadow-sm border border-border max-w-md w-full">
+          <Sparkles className="size-10 text-[#6D3DF5] mx-auto mb-4" />
+          <h3 className="font-semibold text-lg mb-2">Тест из банка задач</h3>
+          <p className="text-sm text-muted-foreground mb-6">
+            Задания подбираются из банка при составлении теста. Выберите количество вопросов и
+            нажмите кнопку ниже или «Составить AI-тест» на главной.
+          </p>
+          <p className="text-sm font-medium text-[#707076] mb-2">Количество вопросов</p>
+          <div className="grid grid-cols-4 gap-2 mb-6">
+            {[3, 5, 8, 10].map((count) => (
+              <button
+                key={count}
+                onClick={() => setTestQuestionCount(count)}
+                className={`h-11 rounded-xl border font-semibold ${
+                  testQuestionCount === count
+                    ? 'border-[#6D3DF5] bg-[#6D3DF5]/5 text-[#6D3DF5]'
+                    : 'border-border bg-[#F7F7FA] text-muted-foreground'
+                }`}
+              >
+                {count}
+              </button>
+            ))}
+          </div>
+          {testError && (
+            <p className="text-sm text-destructive mb-4">{testError}</p>
+          )}
+          <button
+            onClick={handleGenerateTestFromBank}
+            className="w-full bg-[#6D3DF5] text-white font-semibold py-3.5 rounded-xl hover:bg-[#5b2fe3] transition-colors"
+          >
+            Сгенерировать тест
+          </button>
+        </div>
       </div>
     );
   }
@@ -203,8 +345,10 @@ export default function TaskScreen() {
       <div className="h-full flex items-center justify-center bg-[#F3F4F6]">
         <div className="bg-white rounded-2xl p-8 shadow-sm border border-border text-center max-w-sm">
           <Loader2 className="size-12 animate-spin text-[#6D3DF5] mx-auto mb-4" />
-          <h3 className="font-semibold text-lg mb-2">Анализируем результаты</h3>
-          <p className="text-sm text-muted-foreground">AI составляет персональные рекомендации</p>
+          <h3 className="font-semibold text-lg mb-2">Идёт загрузка</h3>
+          <p className="text-sm text-muted-foreground">
+            Подготовка аналитики: Mistral AI проверяет ответы и считает прогноз баллов
+          </p>
         </div>
       </div>
     );
@@ -243,12 +387,14 @@ export default function TaskScreen() {
                 </div>
                 <div className="bg-white rounded-xl p-3 border border-border">
                   <div className="text-sm text-muted-foreground mb-1">Прогноз на экзамен</div>
-                  <div className="font-bold text-lg">{Math.round(analysis.score * 0.9)} баллов</div>
+                  <div className="font-bold text-lg">{analysis.examScore ?? Math.round(analysis.score * 0.9)} баллов</div>
                 </div>
               </div>
               <div className="bg-[#6D3DF5]/5 rounded-xl p-3 border border-[#6D3DF5]/20">
                 <p className="text-xs text-muted-foreground mb-1">Как рассчитывается прогноз:</p>
-                <p className="text-sm">Балл = (процент правильных ответов × 0.9). Это консервативная оценка с учетом стресса на экзамене.</p>
+                <p className="text-sm">
+                  Баллы рассчитывает ИИ по результатам теста и обновляет график на главной.
+                </p>
               </div>
             </div>
             
@@ -270,6 +416,83 @@ export default function TaskScreen() {
                 </ul>
               </div>
             )}
+
+            <div className="bg-[#F7F7FA] rounded-2xl p-6 border border-border mb-6">
+              <h3 className="font-semibold text-lg mb-4">Разбор по вопросам</h3>
+              <div className="space-y-4">
+                {testAnswers.map((answer, index) => {
+                  const breakdown = getBreakdownForAnswer(answer, index);
+                  return (
+                  <div
+                    key={index}
+                    className={`bg-white rounded-xl p-4 border ${
+                      answer.correct
+                        ? 'border-[#6D3DF5]/20'
+                        : 'border-destructive/20'
+                    }`}
+                  >
+                    <div className="flex items-start gap-3 mb-3">
+                      <div
+                        className={`rounded-xl size-8 flex items-center justify-center shrink-0 ${
+                          answer.correct
+                            ? 'bg-[#6D3DF5]/10 text-[#6D3DF5]'
+                            : 'bg-destructive/10 text-destructive'
+                        }`}
+                      >
+                        {answer.correct ? (
+                          <Check className="size-5" />
+                        ) : (
+                          <XIcon className="size-5" />
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="font-semibold text-sm">Вопрос {index + 1}</span>
+                          <span className="text-xs text-muted-foreground">· {answer.topic}</span>
+                        </div>
+                        <p className="text-sm mb-3">{answer.question}</p>
+                        <div className="space-y-2">
+                          <div className="flex items-start gap-2 text-sm">
+                            <span className="text-muted-foreground shrink-0">Ваш ответ:</span>
+                            <span className={answer.correct ? 'text-[#6D3DF5] font-medium' : 'text-destructive font-medium'}>
+                              {answer.selectedAnswer}
+                            </span>
+                          </div>
+                          {!answer.correct && (
+                            <>
+                              <div className="flex items-start gap-2 text-sm">
+                                <span className="text-muted-foreground shrink-0">Правильный ответ:</span>
+                                <span className="text-[#6D3DF5] font-medium">{answer.correctAnswer}</span>
+                              </div>
+                              {breakdown?.explanation && (
+                                <p className="text-sm text-muted-foreground leading-relaxed">
+                                  {breakdown.explanation}
+                                </p>
+                              )}
+                              {breakdown?.chatPrompt && (
+                                <button
+                                  onClick={() =>
+                                    onNavigateToChat(
+                                      breakdown.chatPrompt,
+                                      breakdown.subjectId || answer.subjectId || activeSubjectId
+                                    )
+                                  }
+                                  className="mt-2 inline-flex items-center gap-2 text-sm font-semibold text-[#6D3DF5] hover:underline"
+                                >
+                                  <Sparkles className="size-4" />
+                                  Разобрать подробно с ИИ
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+                })}
+              </div>
+            </div>
             
             <button
               onClick={() => {
@@ -279,6 +502,7 @@ export default function TaskScreen() {
                 setTestAnswers([]);
                 setCurrentQuestionIndex(0);
                 clearAiTestData();
+                clearTestResults();
                 loadTask();
               }}
               className="w-full bg-[#6D3DF5] text-white font-semibold py-4 rounded-xl shadow-lg hover:shadow-xl transition-all"
@@ -343,7 +567,8 @@ export default function TaskScreen() {
                 <button
                   key={index}
                   onClick={() => handleAiTestAnswer(index)}
-                  className="w-full text-left p-4 rounded-xl border-2 border-border bg-white hover:border-[#6D3DF5] hover:bg-[#6D3DF5]/5 transition-colors"
+                  disabled={analyzing}
+                  className="w-full text-left p-4 rounded-xl border-2 border-border bg-white hover:border-[#6D3DF5] hover:bg-[#6D3DF5]/5 transition-colors disabled:opacity-50"
                 >
                   <span className="font-medium">{answer}</span>
                 </button>
@@ -356,6 +581,16 @@ export default function TaskScreen() {
   }
 
   const showExplanation = !!checkResult;
+
+  if (!task) {
+    return (
+      <div className="h-full flex items-center justify-center bg-[#F3F4F6]">
+        <div className="text-center p-6">
+          <p className="text-muted-foreground">Задание не найдено</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full overflow-y-auto pb-6 md:pb-8 bg-[#F3F4F6]">

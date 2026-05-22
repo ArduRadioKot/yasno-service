@@ -20,6 +20,10 @@ type AppContextValue = {
   setActiveSubject: (id: string) => Promise<void>;
   refreshSubjects: () => Promise<void>;
   onStartLesson: () => void;
+  onNavigateToPlan: () => void;
+  onNavigateToChat: (prompt?: string, subjectId?: string) => void;
+  pendingChatPrompt: string | null;
+  clearPendingChatPrompt: () => void;
   taskSessionKey: number;
   account: UserAccount;
   updateAccount: (account: UserAccount) => void;
@@ -31,12 +35,16 @@ const AppContext = createContext<AppContextValue | null>(null);
 export function AppProvider({
   children,
   onNavigateToTasks,
+  onNavigateToPlan,
+  onNavigateToChat,
   account,
   onAccountChange,
   onLogout,
 }: {
   children: ReactNode;
   onNavigateToTasks: () => void;
+  onNavigateToPlan: () => void;
+  onNavigateToChat: (prompt?: string, subjectId?: string) => void;
   account: UserAccount;
   onAccountChange: (account: UserAccount) => void;
   onLogout: () => void;
@@ -48,9 +56,11 @@ export function AppProvider({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [taskSessionKey, setTaskSessionKey] = useState(0);
+  const [pendingChatPrompt, setPendingChatPrompt] = useState<string | null>(null);
 
   const refreshSubjects = useCallback(async () => {
     try {
+      await api.health();
       setError(null);
       const data = await api.getSubjects(account.email);
       setSubjects(data.subjects);
@@ -61,7 +71,12 @@ export function AppProvider({
           : data.activeSubjectId;
       setActiveSubjectId(id);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Ошибка загрузки');
+      const message = e instanceof Error ? e.message : 'Ошибка загрузки';
+      if (message.includes('Failed to fetch') || message.includes('NetworkError')) {
+        setError('Backend недоступен — запустите: npm run backend');
+      } else {
+        setError(message);
+      }
     } finally {
       setLoading(false);
     }
@@ -90,6 +105,23 @@ export function AppProvider({
     onNavigateToTasks();
   }, [onNavigateToTasks]);
 
+  const handleNavigateToChat = useCallback(
+    async (prompt?: string, subjectId?: string) => {
+      if (subjectId && subjectId !== activeSubjectId) {
+        await setActiveSubject(subjectId);
+      }
+      if (prompt) {
+        setPendingChatPrompt(prompt);
+      }
+      onNavigateToChat();
+    },
+    [activeSubjectId, onNavigateToChat, setActiveSubject]
+  );
+
+  const clearPendingChatPrompt = useCallback(() => {
+    setPendingChatPrompt(null);
+  }, []);
+
   return (
     <AppContext.Provider
       value={{
@@ -101,6 +133,10 @@ export function AppProvider({
         setActiveSubject,
         refreshSubjects,
         onStartLesson,
+        onNavigateToPlan,
+        onNavigateToChat: handleNavigateToChat,
+        pendingChatPrompt,
+        clearPendingChatPrompt,
         taskSessionKey,
         account,
         updateAccount: onAccountChange,

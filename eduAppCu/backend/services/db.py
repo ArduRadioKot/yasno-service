@@ -1,5 +1,6 @@
-import sqlite3
 import json
+import re
+import sqlite3
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
@@ -81,9 +82,143 @@ def init_db():
         cursor.execute("SELECT last_active_date FROM user_settings LIMIT 1")
     except sqlite3.OperationalError:
         cursor.execute("ALTER TABLE user_settings ADD COLUMN last_active_date TEXT")
+
+    try:
+        cursor.execute("SELECT topic_progress FROM user_settings LIMIT 1")
+    except sqlite3.OperationalError:
+        cursor.execute("ALTER TABLE user_settings ADD COLUMN topic_progress TEXT DEFAULT '{}'")
+
+    try:
+        cursor.execute("SELECT plan_topics FROM user_settings LIMIT 1")
+    except sqlite3.OperationalError:
+        cursor.execute("ALTER TABLE user_settings ADD COLUMN plan_topics TEXT DEFAULT '{}'")
+
+    try:
+        cursor.execute("SELECT subject_task_progress FROM user_settings LIMIT 1")
+    except sqlite3.OperationalError:
+        cursor.execute(
+            "ALTER TABLE user_settings ADD COLUMN subject_task_progress TEXT DEFAULT '{}'"
+        )
     
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS problem_bank (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            subject_id TEXT NOT NULL,
+            external_id TEXT NOT NULL,
+            topic TEXT,
+            condition TEXT NOT NULL,
+            solution TEXT,
+            answer TEXT,
+            url TEXT,
+            UNIQUE(subject_id, external_id)
+        )
+    """)
+
     conn.commit()
     conn.close()
+
+
+def init_problem_bank_table():
+    """Ensure problem_bank table exists (for lazy init from services)."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS problem_bank (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            subject_id TEXT NOT NULL,
+            external_id TEXT NOT NULL,
+            topic TEXT,
+            condition TEXT NOT NULL,
+            solution TEXT,
+            answer TEXT,
+            url TEXT,
+            UNIQUE(subject_id, external_id)
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+
+def count_problem_bank(subject_id: str) -> int:
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT COUNT(*) AS cnt FROM problem_bank WHERE subject_id = ?",
+        (subject_id,),
+    )
+    row = cursor.fetchone()
+    conn.close()
+    return int(row["cnt"]) if row else 0
+
+
+def insert_problem_bank_batch(rows: list[dict]) -> None:
+    if not rows:
+        return
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    for row in rows:
+        cursor.execute(
+            """
+            INSERT OR IGNORE INTO problem_bank
+            (subject_id, external_id, topic, condition, solution, answer, url)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                row["subject_id"],
+                row["external_id"],
+                row.get("topic"),
+                row["condition"],
+                row.get("solution"),
+                row.get("answer"),
+                row.get("url"),
+            ),
+        )
+    conn.commit()
+    conn.close()
+
+
+def get_problem_bank_random(subject_id: str, count: int) -> list[dict]:
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT external_id, topic, condition, solution, answer, url
+        FROM problem_bank
+        WHERE subject_id = ?
+        ORDER BY RANDOM()
+        LIMIT ?
+        """,
+        (subject_id, count),
+    )
+    rows = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+    return rows
+
+
+def get_problem_bank_by_topic(subject_id: str, topic_filter: str, count: int) -> list[dict]:
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    needle = topic_filter.strip()
+    tokens = [
+        token
+        for token in re.findall(r"[a-zа-яё0-9]+", needle.casefold())
+        if len(token) >= 3
+    ]
+    patterns = [f"%{needle}%", *[f"%{token}%" for token in tokens[:4]]]
+    clauses = ["LOWER(topic) LIKE LOWER(?)"] * len(patterns)
+    cursor.execute(
+        f"""
+        SELECT external_id, topic, condition, solution, answer, url
+        FROM problem_bank
+        WHERE subject_id = ? AND ({' OR '.join(clauses)})
+        ORDER BY RANDOM()
+        LIMIT ?
+        """,
+        (subject_id, *patterns, count),
+    )
+    rows = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+    return rows
 
 
 def create_user(
@@ -213,6 +348,18 @@ def get_user_settings(user_id: int) -> Dict[str, Any]:
             settings["completed_task_ids"] = json.loads(settings["completed_task_ids"])
         else:
             settings["completed_task_ids"] = []
+        if settings.get("topic_progress"):
+            settings["topic_progress"] = json.loads(settings["topic_progress"])
+        else:
+            settings["topic_progress"] = {}
+        if settings.get("plan_topics"):
+            settings["plan_topics"] = json.loads(settings["plan_topics"])
+        else:
+            settings["plan_topics"] = {}
+        if settings.get("subject_task_progress"):
+            settings["subject_task_progress"] = json.loads(settings["subject_task_progress"])
+        else:
+            settings["subject_task_progress"] = {}
         return settings
     return {}
 
@@ -228,8 +375,22 @@ def update_user_settings(user_id: int, **kwargs) -> bool:
         values = []
         
         for key, value in kwargs.items():
-            if key in ["active_subject_id", "streak", "achievements", "completed_task_ids", "last_active_date"]:
-                if key == "completed_task_ids" and isinstance(value, list):
+            if key in [
+                "active_subject_id",
+                "streak",
+                "achievements",
+                "completed_task_ids",
+                "last_active_date",
+                "topic_progress",
+                "plan_topics",
+                "subject_task_progress",
+            ]:
+                if key in (
+                    "completed_task_ids",
+                    "topic_progress",
+                    "plan_topics",
+                    "subject_task_progress",
+                ) and isinstance(value, (list, dict)):
                     value = json.dumps(value)
                 update_fields.append(f"{key} = ?")
                 values.append(value)
@@ -302,6 +463,145 @@ def update_user_progress(user_id: int, subject_id: int, **kwargs) -> bool:
         raise e
     finally:
         conn.close()
+
+
+def get_topic_progress(user_id: int, subject_id: str) -> dict:
+    settings = get_user_settings(user_id) or {}
+    by_subject = settings.get("topic_progress") or {}
+    return by_subject.get(subject_id, {})
+
+
+def get_user_plan_topics(user_id: int, subject_id: str) -> list[dict]:
+    settings = get_user_settings(user_id) or {}
+    by_subject = settings.get("plan_topics") or {}
+    return list(by_subject.get(subject_id, []))
+
+
+def merge_plan_topics_from_gaps(user_id: int, subject_id: str, gaps: list[str]) -> list[dict]:
+    settings = get_user_settings(user_id) or {}
+    all_topics = settings.get("plan_topics") or {}
+    items = list(all_topics.get(subject_id, []))
+    existing = {item["name"].casefold(): item for item in items}
+
+    for index, name in enumerate(gaps):
+        label = str(name).strip()
+        if not label:
+            continue
+        key = label.casefold()
+        if key in existing:
+            topic = existing[key]
+            topic["status"] = "in-progress"
+            topic["progress"] = min(int(topic.get("progress", 25)), 35)
+            continue
+
+        slug = re.sub(r"[^a-zа-я0-9]+", "-", key, flags=re.IGNORECASE).strip("-")
+        topic = {
+            "id": f"ai-{slug or index}",
+            "name": label,
+            "progress": 25,
+            "status": "in-progress",
+            "impact": "из теста",
+        }
+        items.append(topic)
+        existing[key] = topic
+
+    all_topics[subject_id] = items
+    update_user_settings(user_id, plan_topics=all_topics)
+    return items
+
+
+def get_subject_task_progress(user_id: int, subject_id: str) -> dict:
+    settings = get_user_settings(user_id) or {}
+    by_subject = settings.get("subject_task_progress") or {}
+    return dict(by_subject.get(subject_id, {}))
+
+
+def record_test_task_progress(
+    user_id: int,
+    subject_id: str,
+    *,
+    correct_count: int,
+    total_count: int,
+    plan_topic_count: int = 0,
+) -> dict:
+    settings = get_user_settings(user_id) or {}
+    all_progress = settings.get("subject_task_progress") or {}
+    entry = dict(all_progress.get(subject_id, {}))
+
+    entry["correct"] = int(entry.get("correct", 0)) + max(0, correct_count)
+    entry["answered"] = int(entry.get("answered", 0)) + max(0, total_count)
+    entry["tests"] = int(entry.get("tests", 0)) + 1
+    entry["goal"] = max(
+        int(entry.get("goal", 0)),
+        plan_topic_count,
+        5,
+    )
+
+    all_progress[subject_id] = entry
+    update_user_settings(user_id, subject_task_progress=all_progress)
+    return entry
+
+
+def add_completed_task(user_id: int, task_id: str) -> list[str]:
+    settings = get_user_settings(user_id) or {}
+    completed = list(settings.get("completed_task_ids") or [])
+    if task_id not in completed:
+        completed.append(task_id)
+        update_user_settings(user_id, completed_task_ids=completed)
+    return completed
+
+
+def update_plan_topic_entry(
+    user_id: int,
+    subject_id: str,
+    topic_id: str,
+    *,
+    status: str,
+    progress: int | None = None,
+) -> None:
+    settings = get_user_settings(user_id) or {}
+    all_topics = settings.get("plan_topics") or {}
+    items = list(all_topics.get(subject_id, []))
+    for item in items:
+        if item.get("id") == topic_id:
+            item["status"] = status
+            if progress is not None:
+                item["progress"] = max(0, min(100, int(progress)))
+            elif status == "completed":
+                item["progress"] = 100
+                item["impact"] = "✓"
+            elif status == "in-progress" and item.get("progress", 0) < 10:
+                item["progress"] = max(item.get("progress", 0), 40)
+            break
+    all_topics[subject_id] = items
+    update_user_settings(user_id, plan_topics=all_topics)
+
+
+def set_topic_progress(
+    user_id: int,
+    subject_id: str,
+    topic_id: str,
+    *,
+    status: str,
+    progress: int | None = None,
+) -> dict:
+    settings = get_user_settings(user_id) or {}
+    all_progress = settings.get("topic_progress") or {}
+    subject_topics = dict(all_progress.get(subject_id, {}))
+
+    entry = dict(subject_topics.get(topic_id, {}))
+    entry["status"] = status
+    if progress is not None:
+        entry["progress"] = max(0, min(100, int(progress)))
+    elif status == "completed":
+        entry["progress"] = 100
+    elif status == "in-progress" and "progress" not in entry:
+        entry["progress"] = 50
+
+    subject_topics[topic_id] = entry
+    all_progress[subject_id] = subject_topics
+    update_user_settings(user_id, topic_progress=all_progress)
+    return entry
 
 
 def upsert_user_progress(user_id: int, subject_id: str, score: int = 0, score_delta: int = 0, chart: list | None = None) -> bool:

@@ -1,44 +1,188 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Calendar,
   TrendingUp,
   Circle,
   CheckCircle2,
   AlertCircle,
-  ChevronRight,
   Target,
   BookOpen,
+  Loader2,
+  RotateCcw,
 } from 'lucide-react';
 import { api } from '../api/client';
 import { useApp } from '../context/AppContext';
-import type { PlanData } from '../types';
+import type { PlanData, PlanSection, PlanTopic } from '../types';
 import SubjectSelector from './subject-selector';
 
+const PRIORITY_CATEGORY = 'Требуют внимания';
+const IN_PROGRESS_CATEGORY = 'В процессе';
+const COMPLETED_CATEGORY = 'Освоенные темы';
+
+function SectionIcon({ section }: { section: PlanSection }) {
+  if (section.category === PRIORITY_CATEGORY || section.priority === 'high') {
+    return (
+      <div className="bg-destructive/10 rounded-xl size-10 flex items-center justify-center">
+        <AlertCircle className="size-5 text-destructive" />
+      </div>
+    );
+  }
+  if (section.priority === 'completed' || section.category === COMPLETED_CATEGORY) {
+    return (
+      <div className="bg-[#6D3DF5]/10 rounded-xl size-10 flex items-center justify-center">
+        <CheckCircle2 className="size-5 text-[#6D3DF5]" />
+      </div>
+    );
+  }
+  return (
+    <div className="bg-[#6D3DF5]/10 rounded-xl size-10 flex items-center justify-center">
+      <Circle className="size-5 text-[#6D3DF5]" />
+    </div>
+  );
+}
+
+function TopicCard({
+  item,
+  section,
+  updatingId,
+  onStatusChange,
+}: {
+  item: PlanTopic;
+  section: PlanSection;
+  updatingId: string | null;
+  onStatusChange: (topicId: string, status: 'completed' | 'in-progress') => void;
+}) {
+  const isCompleted = item.status === 'completed';
+  const isUpdating = updatingId === item.id;
+  const barColor = '#6D3DF5';
+
+  return (
+    <div className="bg-white rounded-xl px-4 py-3 shadow-sm border border-border hover:shadow-md transition-shadow">
+      <div className="flex items-center gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <h4
+              className={`font-semibold truncate ${
+                isCompleted ? 'text-muted-foreground line-through' : 'text-foreground'
+              }`}
+            >
+              {item.name}
+            </h4>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap text-xs mt-0.5">
+            {!isCompleted && (
+              <span className="text-muted-foreground">{item.progress}%</span>
+            )}
+            {isCompleted && <span className="text-[#6D3DF5] font-medium">Освоено</span>}
+            {!isCompleted && item.status === 'in-progress' && (
+              <span className="text-amber-600 font-medium">В работе</span>
+            )}
+            {!isCompleted && item.status === 'pending' && (
+              <span className="text-muted-foreground">Не начато</span>
+            )}
+          </div>
+          {!isCompleted && (
+            <div className="h-1.5 bg-muted rounded-full overflow-hidden mt-2 max-w-xs">
+              <div
+                className="h-full rounded-full transition-all duration-500"
+                style={{ width: `${item.progress}%`, backgroundColor: barColor }}
+              />
+            </div>
+          )}
+        </div>
+
+        {!isCompleted ? (
+          <button
+            type="button"
+            disabled={isUpdating}
+            onClick={() => onStatusChange(item.id, 'completed')}
+            title="Отметить освоенной"
+            aria-label="Отметить освоенной"
+            className="shrink-0 size-9 rounded-full border-2 border-[#6D3DF5]/30 bg-white text-[#6D3DF5] hover:bg-[#6D3DF5]/10 hover:border-[#6D3DF5] disabled:opacity-50 inline-flex items-center justify-center transition-colors"
+          >
+            {isUpdating ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <CheckCircle2 className="size-4" />
+            )}
+          </button>
+        ) : (
+          <button
+            type="button"
+            disabled={isUpdating}
+            onClick={() => onStatusChange(item.id, 'in-progress')}
+            title="Вернуть в работу"
+            aria-label="Вернуть в работу"
+            className="shrink-0 size-9 rounded-full border border-border bg-[#F7F7FA] text-muted-foreground hover:border-[#6D3DF5] hover:text-[#6D3DF5] disabled:opacity-50 inline-flex items-center justify-center transition-colors"
+          >
+            {isUpdating ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <RotateCcw className="size-4" />
+            )}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function PlanScreen() {
-  const { activeSubjectId, activeSubject } = useApp();
+  const { activeSubjectId, activeSubject, account } = useApp();
   const [plan, setPlan] = useState<PlanData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [updatingTopicId, setUpdatingTopicId] = useState<string | null>(null);
+
+  const loadPlan = useCallback(() => {
+    setLoading(true);
+    return api
+      .getPlan(activeSubjectId, account.email)
+      .then((data) => setPlan(data))
+      .catch(() => setPlan(null))
+      .finally(() => setLoading(false));
+  }, [activeSubjectId, account.email]);
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    api
-      .getPlan(activeSubjectId)
-      .then((data) => {
-        if (!cancelled) setPlan(data);
-      })
-      .catch(() => {
-        if (!cancelled) setPlan(null);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+    loadPlan().then(() => {
+      if (cancelled) return;
+    });
+    const onTestComplete = () => {
+      if (!cancelled) loadPlan();
+    };
+    window.addEventListener('edu-test-complete', onTestComplete);
     return () => {
       cancelled = true;
+      window.removeEventListener('edu-test-complete', onTestComplete);
     };
-  }, [activeSubjectId]);
+  }, [loadPlan]);
 
-  const color = '#6D3DF5';
+  const handleStatusChange = async (topicId: string, status: 'completed' | 'in-progress') => {
+    setUpdatingTopicId(topicId);
+    try {
+      const updated = await api.updatePlanTopic(
+        topicId,
+        activeSubjectId,
+        status,
+        account.email,
+        status === 'completed' ? 100 : undefined
+      );
+      setPlan(updated);
+    } catch (error) {
+      console.error('Failed to update topic:', error);
+    } finally {
+      setUpdatingTopicId(null);
+    }
+  };
+
+  const prioritySection = plan?.sections.find((s) => s.category === PRIORITY_CATEGORY);
+  const inProgressSection = plan?.sections.find((s) => s.category === IN_PROGRESS_CATEGORY);
+  const completedSection = plan?.sections.find((s) => s.category === COMPLETED_CATEGORY);
+  const hasAnyTopics =
+    (prioritySection?.items.length ?? 0) +
+      (inProgressSection?.items.length ?? 0) +
+      (completedSection?.items.length ?? 0) >
+    0;
 
   return (
     <div className="h-full overflow-y-auto pb-6 md:pb-8 bg-[#F3F4F6]">
@@ -131,87 +275,101 @@ export default function PlanScreen() {
               <SubjectSelector variant="grid" />
             </div>
 
-            <div className="grid grid-cols-1 xl:grid-cols-2 xl:gap-6">
-              {plan.sections.map((section, sectionIndex) => (
-                <div key={sectionIndex} className="mb-6">
-                  <div className="flex items-center gap-3 mb-4">
-                    {section.priority === 'high' && (
-                      <div className="bg-destructive/10 rounded-xl size-10 flex items-center justify-center">
-                        <AlertCircle className="size-5 text-destructive" />
-                      </div>
-                    )}
-                    {section.priority === 'medium' && (
-                      <div className="bg-[#6D3DF5]/10 rounded-xl size-10 flex items-center justify-center">
-                        <Circle className="size-5 text-[#6D3DF5]" />
-                      </div>
-                    )}
-                    {section.priority === 'completed' && (
-                      <div className="bg-[#6D3DF5]/10 rounded-xl size-10 flex items-center justify-center">
-                        <CheckCircle2 className="size-5 text-[#6D3DF5]" />
-                      </div>
-                    )}
-                    <h3 className="font-semibold text-lg">{section.category}</h3>
-                  </div>
+            {!hasAnyTopics && (
+              <div className="mb-8 bg-white rounded-xl p-8 border border-dashed border-border text-center">
+                <p className="text-muted-foreground text-sm leading-relaxed">
+                  Пока нет тем в плане. Пройдите AI-тест на главной — после разбора ответов слабые темы
+                  появятся здесь автоматически.
+                </p>
+              </div>
+            )}
 
-                  <div className="space-y-3">
-                    {section.items.map((item) => (
-                      <div
-                        key={item.id}
-                        className="bg-white rounded-xl p-5 shadow-sm border border-border hover:shadow-md transition-shadow"
-                      >
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-2">
-                              <h4 className="font-semibold">{item.name}</h4>
-                              {item.status === 'completed' && (
-                                <CheckCircle2 className="size-5 text-[#6D3DF5]" />
-                              )}
-                            </div>
-                            <div className="flex items-center gap-4 flex-wrap">
-                              <span
-                                className={`text-sm font-medium ${
-                                  section.priority === 'high'
-                                    ? 'text-destructive'
-                                    : section.priority === 'completed'
-                                    ? 'text-[#6D3DF5]'
-                                    : 'text-[#6D3DF5]'
-                                }`}
-                              >
-                                {item.impact}
-                              </span>
-                              {item.status !== 'completed' && (
-                                <span className="text-sm text-muted-foreground">
-                                  {item.progress}% готовности
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                          <ChevronRight className="size-5 text-muted-foreground shrink-0 ml-2" />
-                        </div>
-                        {item.status !== 'completed' && (
-                          <div className="h-2 bg-muted rounded-full overflow-hidden">
-                            <div
-                              className={`h-full rounded-full transition-all duration-500 ${
-                                section.priority === 'high'
-                                  ? 'bg-destructive'
-                                  : ''
-                              }`}
-                              style={{
-                                width: `${item.progress}%`,
-                                background:
-                                  section.priority !== 'high'
-                                    ? color
-                                    : undefined,
-                              }}
-                            />
-                          </div>
-                        )}
-                      </div>
-                    ))}
+            {prioritySection && prioritySection.items.length > 0 && (
+              <div className="mb-8">
+                <div className="flex items-center gap-3 mb-2">
+                  <SectionIcon section={prioritySection} />
+                  <div>
+                    <h3 className="font-semibold text-lg">{prioritySection.category}</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Темы из последних тестов, которые стоит разобрать в первую очередь
+                    </p>
                   </div>
                 </div>
-              ))}
-            </div>
+                <div className="space-y-3 mt-4">
+                  {prioritySection.items.map((item) => (
+                    <TopicCard
+                      key={item.id}
+                      item={item}
+                      section={prioritySection}
+                      updatingId={updatingTopicId}
+                      onStatusChange={handleStatusChange}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {inProgressSection && (
+              <div className="mb-8">
+                <div className="flex items-center gap-3 mb-4">
+                  <SectionIcon section={inProgressSection} />
+                  <div>
+                    <h3 className="font-semibold text-lg">{inProgressSection.category}</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Темы, которые вы сейчас изучаете — отметьте освоенной, когда будете готовы
+                    </p>
+                  </div>
+                </div>
+                {inProgressSection.items.length > 0 ? (
+                  <div className="space-y-3">
+                    {inProgressSection.items.map((item) => (
+                      <TopicCard
+                        key={item.id}
+                        item={item}
+                        section={inProgressSection}
+                        updatingId={updatingTopicId}
+                        onStatusChange={handleStatusChange}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="bg-white rounded-xl p-6 border border-dashed border-border text-center text-muted-foreground text-sm">
+                    Нет тем в работе. Пройдите тест или верните тему из блока «Освоенные».
+                  </div>
+                )}
+              </div>
+            )}
+
+            {completedSection && (
+              <div className="mb-8">
+                <div className="flex items-center gap-3 mb-4">
+                  <SectionIcon section={completedSection} />
+                  <div>
+                    <h3 className="font-semibold text-lg">{completedSection.category}</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Уже освоенные темы — можно вернуть в работу для повторения
+                    </p>
+                  </div>
+                </div>
+                {completedSection.items.length > 0 ? (
+                  <div className="space-y-3">
+                    {completedSection.items.map((item) => (
+                      <TopicCard
+                        key={item.id}
+                        item={item}
+                        section={completedSection}
+                        updatingId={updatingTopicId}
+                        onStatusChange={handleStatusChange}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="bg-white rounded-xl p-6 border border-dashed border-border text-center text-muted-foreground text-sm">
+                    Пока нет освоенных тем. Отмечайте темы кнопкой «Отметить освоенной».
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="bg-white rounded-2xl p-6 border border-border shadow-sm">
               <div className="flex items-start gap-4">

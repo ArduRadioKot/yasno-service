@@ -6,39 +6,12 @@
       { "date": "6 июня (ЕГЭ)", "score": 87, "current": false },
       { "date": "1 июля", "score": 85, "current": false }
     ],
-    "forecast": "Если продолжишь в таком темпе, к экзамену достигнешь 87 баллов. Сфокусируйся на оптике для быстрого прогресса.",
-    "weeklyGoal": "Подними оптику до 65% и закрой тему колебания — получишь значок «Быстрый старт» 🚀",
-    "weeklyProgress": 60,
-    "weeklyTasksDone": 3,
-    "weeklyTasksTotal": 5,
-    "sections": [
-      {
-        "category": "Критические темы",
-        "priority": "high",
-        "items": [
-          { "id": "optics", "name": "Оптика", "progress": 45, "status": "in-progress", "impact": "+8 баллов" },
-          { "id": "waves", "name": "Колебания и волны", "progress": 38, "status": "in-progress", "impact": "+6 баллов" }
-        ]
-      },
-      {
-        "category": "В процессе",
-        "priority": "medium",
-        "items": [
-          { "id": "electro", "name": "Электродинамика", "progress": 62, "status": "in-progress", "impact": "+5 баллов" },
-          { "id": "thermo", "name": "Термодинамика", "progress": 71, "status": "in-progress", "impact": "+3 балла" },
-          { "id": "magnetic", "name": "Магнитное поле", "progress": 0, "status": "pending", "impact": "+4 балла" }
-        ]
-      },
-      {
-        "category": "Освоенные темы",
-        "priority": "completed",
-        "items": [
-          { "id": "kinematics", "name": "Кинематика", "progress": 95, "status": "completed", "impact": "✓" },
-          { "id": "dynamics", "name": "Динамика", "progress": 92, "status": "completed", "impact": "✓" },
-          { "id": "conservation", "name": "Законы сохранения", "progress": 88, "status": "completed", "impact": "✓" }
-        ]
-      }
-    ]
+    "forecast": "Пройди диагностический тест — Ясно! составит персональный план по слабым темам.",
+    "weeklyGoal": "Пройди тест и закрепи темы, которые ИИ отметит после разбора ответов.",
+    "weeklyProgress": 0,
+    "weeklyTasksDone": 0,
+    "weeklyTasksTotal": 0,
+    "sections": []
   },
   "math": {
     "milestones": [
@@ -47,37 +20,12 @@
       { "date": "6 июня (ЕГЭ)", "score": 82, "current": false },
       { "date": "1 июля", "score": 78, "current": false }
     ],
-    "forecast": "Профильный уровень близок — удели внимание производным и стереометрии.",
-    "weeklyGoal": "Реши 10 задач из части 2 по алгебре и закрепи тригонометрию.",
-    "weeklyProgress": 45,
-    "weeklyTasksDone": 2,
-    "weeklyTasksTotal": 5,
-    "sections": [
-      {
-        "category": "Критические темы",
-        "priority": "high",
-        "items": [
-          { "id": "derivatives", "name": "Производная", "progress": 52, "status": "in-progress", "impact": "+7 баллов" },
-          { "id": "stereo", "name": "Стереометрия", "progress": 40, "status": "in-progress", "impact": "+6 баллов" }
-        ]
-      },
-      {
-        "category": "В процессе",
-        "priority": "medium",
-        "items": [
-          { "id": "trig", "name": "Тригонометрия", "progress": 65, "status": "in-progress", "impact": "+4 балла" },
-          { "id": "prob", "name": "Теория вероятностей", "progress": 55, "status": "in-progress", "impact": "+3 балла" }
-        ]
-      },
-      {
-        "category": "Освоенные темы",
-        "priority": "completed",
-        "items": [
-          { "id": "equations", "name": "Уравнения", "progress": 90, "status": "completed", "impact": "✓" },
-          { "id": "planimetry", "name": "Планиметрия", "progress": 85, "status": "completed", "impact": "✓" }
-        ]
-      }
-    ]
+    "forecast": "Пройди диагностический тест — Ясно! составит персональный план по слабым темам.",
+    "weeklyGoal": "Пройди тест и закрепи темы, которые ИИ отметит после разбора ответов.",
+    "weeklyProgress": 0,
+    "weeklyTasksDone": 0,
+    "weeklyTasksTotal": 0,
+    "sections": []
   },
   "russian": {
     "milestones": [
@@ -85,118 +33,107 @@
       { "date": "15 июня", "score": 85, "current": false },
       { "date": "6 июня (ЕГЭ)", "score": 90, "current": false }
     ],
-    "forecast": "Сильная база по тестовой части — прокачай сочинение и орфографию.",
-    "weeklyGoal": "Напиши 2 сочинения и разбери 5 заданий на запятые.",
-    "weeklyProgress": 70,
-    "weeklyTasksDone": 4,
-    "weeklyTasksTotal": 5,
-    "sections": [
-      {
-        "category": "Критические темы",
-        "priority": "high",
-        "items": [
-          { "id": "essay", "name": "Сочинение", "progress": 60, "status": "in-progress", "impact": "+10 баллов" },
-          { "id": "punctuation", "name": "Пунктуация", "progress": 55, "status": "in-progress", "impact": "+5 баллов" }
-        ]
-      },
-      {
-        "category": "В процессе",
-        "priority": "medium",
-        "items": [
-          { "id": "syntax", "name": "Синтаксис", "progress": 72, "status": "in-progress", "impact": "+3 балла" }
-        ]
-      },
-      {
-        "category": "Освоенные темы",
-        "priority": "completed",
-        "items": [
-          { "id": "lexicon", "name": "Лексика", "progress": 92, "status": "completed", "impact": "✓" }
-        ]
-      }
-    ]
+    "forecast": "Пройди диагностический тест — Ясно! составит персональный план по слабым темам.",
+    "weeklyGoal": "Пройди тест и закрепи темы, которые ИИ отметит после разбора ответов.",
+    "weeklyProgress": 0,
+    "weeklyTasksDone": 0,
+    "weeklyTasksTotal": 0,
+    "sections": []
   },
   "history": {
     "milestones": [
       { "date": "1 июня", "score": 72, "current": true },
       { "date": "6 июня (ЕГЭ)", "score": 85, "current": false }
     ],
-    "forecast": "Повтори XIX век и закрепи даты Первой мировой войны.",
-    "weeklyGoal": "Выучи 20 ключевых дат и разбери 3 темы второй половины XIX века.",
-    "weeklyProgress": 50,
-    "weeklyTasksDone": 2,
-    "weeklyTasksTotal": 4,
-    "sections": [
-      {
-        "category": "Критические темы",
-        "priority": "high",
-        "items": [
-          { "id": "19c", "name": "XIX век", "progress": 48, "status": "in-progress", "impact": "+8 баллов" },
-          { "id": "ww1", "name": "Первая мировая", "progress": 42, "status": "in-progress", "impact": "+6 баллов" }
-        ]
-      },
-      {
-        "category": "Освоенные темы",
-        "priority": "completed",
-        "items": [
-          { "id": "ancient", "name": "Древний мир", "progress": 88, "status": "completed", "impact": "✓" }
-        ]
-      }
-    ]
+    "forecast": "Пройди диагностический тест — Ясно! составит персональный план по слабым темам.",
+    "weeklyGoal": "Пройди тест и закрепи темы, которые ИИ отметит после разбора ответов.",
+    "weeklyProgress": 0,
+    "weeklyTasksDone": 0,
+    "weeklyTasksTotal": 0,
+    "sections": []
   },
   "chemistry": {
     "milestones": [
       { "date": "1 июня", "score": 65, "current": true },
       { "date": "6 июня (ЕГЭ)", "score": 80, "current": false }
     ],
-    "forecast": "Органика требует внимания — повтори номенклатуру и механизмы.",
-    "weeklyGoal": "Реши 8 задач на расчёты и 5 по органической химии.",
-    "weeklyProgress": 40,
-    "weeklyTasksDone": 2,
-    "weeklyTasksTotal": 5,
-    "sections": [
-      {
-        "category": "Критические темы",
-        "priority": "high",
-        "items": [
-          { "id": "organic", "name": "Органическая химия", "progress": 35, "status": "in-progress", "impact": "+9 баллов" },
-          { "id": "calculations", "name": "Расчётные задачи", "progress": 50, "status": "in-progress", "impact": "+6 баллов" }
-        ]
-      },
-      {
-        "category": "В процессе",
-        "priority": "medium",
-        "items": [
-          { "id": "inorganic", "name": "Неорганическая химия", "progress": 68, "status": "in-progress", "impact": "+4 балла" }
-        ]
-      }
-    ]
+    "forecast": "Пройди диагностический тест — Ясно! составит персональный план по слабым темам.",
+    "weeklyGoal": "Пройди тест и закрепи темы, которые ИИ отметит после разбора ответов.",
+    "weeklyProgress": 0,
+    "weeklyTasksDone": 0,
+    "weeklyTasksTotal": 0,
+    "sections": []
   },
   "informatics": {
     "milestones": [
       { "date": "1 июня", "score": 75, "current": true },
       { "date": "6 июня (ЕГЭ)", "score": 88, "current": false }
     ],
-    "forecast": "Алгоритмы на графах — слабое место. Практикуй задачи 26–27 номера.",
-    "weeklyGoal": "Реши 5 задач на графы и 3 на программирование.",
-    "weeklyProgress": 55,
-    "weeklyTasksDone": 3,
-    "weeklyTasksTotal": 5,
-    "sections": [
-      {
-        "category": "Критические темы",
-        "priority": "high",
-        "items": [
-          { "id": "graphs", "name": "Графы", "progress": 44, "status": "in-progress", "impact": "+7 баллов" },
-          { "id": "programming", "name": "Программирование", "progress": 58, "status": "in-progress", "impact": "+6 баллов" }
-        ]
-      },
-      {
-        "category": "Освоенные темы",
-        "priority": "completed",
-        "items": [
-          { "id": "systems", "name": "Системы счисления", "progress": 90, "status": "completed", "impact": "✓" }
-        ]
-      }
-    ]
+    "forecast": "Пройди диагностический тест — Ясно! составит персональный план по слабым темам.",
+    "weeklyGoal": "Пройди тест и закрепи темы, которые ИИ отметит после разбора ответов.",
+    "weeklyProgress": 0,
+    "weeklyTasksDone": 0,
+    "weeklyTasksTotal": 0,
+    "sections": []
+  },
+  "biology": {
+    "milestones": [
+      { "date": "1 июня", "score": 70, "current": true },
+      { "date": "6 июня (ЕГЭ)", "score": 82, "current": false }
+    ],
+    "forecast": "Пройди диагностический тест — Ясно! составит персональный план по слабым темам.",
+    "weeklyGoal": "Пройди тест и закрепи темы, которые ИИ отметит после разбора ответов.",
+    "weeklyProgress": 0,
+    "weeklyTasksDone": 0,
+    "weeklyTasksTotal": 0,
+    "sections": []
+  },
+  "geography": {
+    "milestones": [
+      { "date": "1 июня", "score": 68, "current": true },
+      { "date": "6 июня (ЕГЭ)", "score": 80, "current": false }
+    ],
+    "forecast": "Пройди диагностический тест — Ясно! составит персональный план по слабым темам.",
+    "weeklyGoal": "Пройди тест и закрепи темы, которые ИИ отметит после разбора ответов.",
+    "weeklyProgress": 0,
+    "weeklyTasksDone": 0,
+    "weeklyTasksTotal": 0,
+    "sections": []
+  },
+  "literature": {
+    "milestones": [
+      { "date": "1 июня", "score": 72, "current": true },
+      { "date": "6 июня (ЕГЭ)", "score": 85, "current": false }
+    ],
+    "forecast": "Пройди диагностический тест — Ясно! составит персональный план по слабым темам.",
+    "weeklyGoal": "Пройди тест и закрепи темы, которые ИИ отметит после разбора ответов.",
+    "weeklyProgress": 0,
+    "weeklyTasksDone": 0,
+    "weeklyTasksTotal": 0,
+    "sections": []
+  },
+  "french": {
+    "milestones": [
+      { "date": "1 июня", "score": 65, "current": true },
+      { "date": "6 июня (ЕГЭ)", "score": 78, "current": false }
+    ],
+    "forecast": "Пройди диагностический тест — Ясно! составит персональный план по слабым темам.",
+    "weeklyGoal": "Пройди тест и закрепи темы, которые ИИ отметит после разбора ответов.",
+    "weeklyProgress": 0,
+    "weeklyTasksDone": 0,
+    "weeklyTasksTotal": 0,
+    "sections": []
+  },
+  "social": {
+    "milestones": [
+      { "date": "1 июня", "score": 74, "current": true },
+      { "date": "6 июня (ЕГЭ)", "score": 84, "current": false }
+    ],
+    "forecast": "Пройди диагностический тест — Ясно! составит персональный план по слабым темам.",
+    "weeklyGoal": "Пройди тест и закрепи темы, которые ИИ отметит после разбора ответов.",
+    "weeklyProgress": 0,
+    "weeklyTasksDone": 0,
+    "weeklyTasksTotal": 0,
+    "sections": []
   }
 }

@@ -6,8 +6,8 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite",
-    "backend": "cd backend && (test -d .venv || python3 -m venv .venv) && .venv/bin/pip install -q -r requirements.txt && .venv/bin/python app.py",
-    "backend:setup": "cd backend && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt",
+    "backend": "cd backend && (test -d .venv || python3 -m venv .venv) && .venv/bin/python -m pip install -q -r requirements.txt && .venv/bin/python app.py",
+    "backend:setup": "cd backend && python3 -m venv .venv && .venv/bin/python -m pip install -r requirements.txt",
     "start": "echo 'Run in two terminals: npm run backend && npm run dev'",
     "fix:perms": "node -e \"const fs=require('fs');const p='node_modules/.perm-test';try{fs.mkdirSync(p);fs.rmdirSync(p);console.log('OK: node_modules is writable');}catch{console.error('\\n⚠ node_modules belongs to root. Run:\\n  sudo chown -R \\\"$(whoami)\\\" node_modules package-lock.json\\n  npm install\\n');process.exit(1)}\""
   },

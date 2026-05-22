@@ -51,12 +51,18 @@ export type AiTestQuestion = {
   question: string;
   answers: string[];
   correctIndex: number;
+  problemId?: string;
+  subjectId?: string;
+  solution?: string;
 };
 
 export type AiTestData = {
   topic: string;
   questions: AiTestQuestion[];
   subjects?: string[];
+  subjectIds?: string[];
+  subjectId?: string;
+  topicName?: string;
 };
 
 export type AiTestAnswer = {
@@ -65,20 +71,33 @@ export type AiTestAnswer = {
   selectedAnswer: string;
   correctAnswer: string;
   correct: boolean;
+  subjectId?: string;
+  problemId?: string;
+};
+
+export type AiTestBreakdown = {
+  question?: string;
+  topic?: string;
+  explanation?: string;
+  chatPrompt?: string;
+  subjectId?: string;
 };
 
 export type AiTestAnalysis = {
   analysis: string;
   gaps: string[];
   score: number;
+  examScore: number;
   level: string;
+  breakdowns?: AiTestBreakdown[];
+  subjects?: string[];
 };
 
 export type PlanTopic = {
   id: string;
   name: string;
   progress: number;
-  status: string;
+  status: 'completed' | 'in-progress' | 'pending' | string;
   impact: string;
 };
 
@@ -102,6 +121,22 @@ export type PlanData = {
   sections: PlanSection[];
 };
 
+export type DashboardTopic = {
+  id: string;
+  topic: string;
+  progress: number;
+  color: string;
+};
+
+export type PlanTopicBrief = {
+  id: string;
+  name: string;
+  progress: number;
+  status: string;
+  priority: string;
+  section?: string;
+};
+
 export type DashboardData = {
   userName: string;
   subject: Subject;
@@ -110,7 +145,8 @@ export type DashboardData = {
   chart: { day: number; score: number }[];
   streak: number;
   achievements: number;
-  weakTopics: { topic: string; progress: number; color: string }[];
+  weakTopics: DashboardTopic[];
+  allTopics?: PlanTopicBrief[];
   recommendation: string;
   dailyPlanRemaining: number;
   tasksTotal: number;

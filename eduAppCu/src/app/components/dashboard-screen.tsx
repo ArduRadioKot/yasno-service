@@ -1,9 +1,29 @@
 import { useEffect, useState } from 'react';
-import { Target, TrendingUp, Award, Flame, Brain, ChevronRight, Loader2, Hand, Atom, Calculator, BookOpen, Landmark, FlaskConical, Laptop } from 'lucide-react';
-import { AreaChart, Area, ResponsiveContainer } from 'recharts';
+import {
+  Target,
+  TrendingUp,
+  Award,
+  Flame,
+  Brain,
+  ChevronRight,
+  Loader2,
+  Hand,
+  Atom,
+  Calculator,
+  BookOpen,
+  Landmark,
+  FlaskConical,
+  Laptop,
+  Dna,
+  Globe,
+  ScrollText,
+  Languages,
+  Users,
+} from 'lucide-react';
+import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer } from 'recharts';
 import { api, setAiTestData } from '../api/client';
 import { useApp } from '../context/AppContext';
-import type { DashboardData } from '../types';
+import type { DashboardData, PlanTopicBrief } from '../types';
 import SubjectSelector from './subject-selector';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 
@@ -14,58 +34,169 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   'landmark': Landmark,
   'flask-conical': FlaskConical,
   'laptop': Laptop,
+  'dna': Dna,
+  'globe': Globe,
+  'scroll-text': ScrollText,
+  'languages': Languages,
+  'users': Users,
 };
+
+const QUESTION_COUNTS = [3, 5, 8, 10] as const;
 
 function SubjectIcon({ iconName, className }: { iconName: string; className?: string }) {
   const Icon = iconMap[iconName] || Atom;
   return <Icon className={className} />;
 }
 
+function QuestionCountPicker({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (count: number) => void;
+}) {
+  return (
+    <div className="py-2">
+      <p className="text-sm font-medium text-[#707076] mb-2">Количество вопросов</p>
+      <div className="grid grid-cols-4 gap-2">
+        {QUESTION_COUNTS.map((count) => (
+          <button
+            key={count}
+            type="button"
+            onClick={() => onChange(count)}
+            className={`h-11 rounded-xl border font-semibold ${
+              value === count
+                ? 'border-[#6D3DF5] bg-[#6D3DF5]/5 text-[#6D3DF5]'
+                : 'border-border bg-[#F7F7FA] text-muted-foreground'
+            }`}
+          >
+            {count}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardScreen() {
-  const { activeSubjectId, onStartLesson, subjects, setActiveSubject, account } = useApp();
+  const { activeSubjectId, onStartLesson, subjects, setActiveSubject, account, onNavigateToPlan } = useApp();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [showSubjectModal, setShowSubjectModal] = useState(false);
+  const [showAllTopicsModal, setShowAllTopicsModal] = useState(false);
+  const [showTopicTestModal, setShowTopicTestModal] = useState(false);
+  const [selectedTopic, setSelectedTopic] = useState<PlanTopicBrief | null>(null);
   const [generatingTest, setGeneratingTest] = useState(false);
+  const [generatingTopicName, setGeneratingTopicName] = useState<string | null>(null);
   const [questionCount, setQuestionCount] = useState(5);
+  const [testError, setTestError] = useState<string | null>(null);
+
+  const loadDashboard = () => {
+    setLoading(true);
+    return api
+      .getDashboard(activeSubjectId, account.email)
+      .then((d) => setData(d))
+      .finally(() => setLoading(false));
+  };
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    api
-      .getDashboard(activeSubjectId, account.email)
-      .then((d) => {
-        if (!cancelled) setData(d);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+    loadDashboard().then(() => {
+      if (cancelled) return;
+    });
+    const onTestComplete = () => {
+      if (!cancelled) loadDashboard();
+    };
+    window.addEventListener('edu-test-complete', onTestComplete);
     return () => {
       cancelled = true;
+      window.removeEventListener('edu-test-complete', onTestComplete);
     };
   }, [activeSubjectId, account.email]);
 
   const color = '#6D3DF5';
   const userName = account.firstName || data?.userName || 'Ученик';
+  const taskProgressPercent = data
+    ? data.tasksTotal > 0
+      ? Math.min(100, Math.round((data.tasksCompleted / data.tasksTotal) * 100))
+      : 0
+    : 0;
+  const allTopics = data?.allTopics?.length
+    ? data.allTopics
+    : (data?.weakTopics ?? []).map((t) => ({
+        id: t.id,
+        name: t.topic,
+        progress: t.progress,
+        status: 'pending',
+        priority: 'medium',
+      }));
 
-  const handleStartLesson = () => {
-    setShowSubjectModal(true);
+  const openTopicTest = (topic: PlanTopicBrief) => {
+    setSelectedTopic(topic);
+    setTestError(null);
+    setShowAllTopicsModal(false);
+    setShowTopicTestModal(true);
   };
 
-  const handleSubjectSelect = async (subjectId: string) => {
+  const runTest = async (
+    subjectId: string,
+    topicLabel: string,
+    count: number,
+    topicName?: string
+  ) => {
     setGeneratingTest(true);
+    setGeneratingTopicName(topicName ?? null);
+    setTestError(null);
     setShowSubjectModal(false);
-    
+    setShowTopicTestModal(false);
+    setShowAllTopicsModal(false);
+
     try {
       await setActiveSubject(subjectId);
-      const test = await api.generateTest(subjectId, 'диагностика по предмету', questionCount, account.email);
+      const test = await api.generateTest(subjectId, topicLabel, count, topicName);
+      if (!test.questions?.length) {
+        throw new Error('Не удалось загрузить задания для теста');
+      }
       setAiTestData(test);
       onStartLesson();
     } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Не удалось загрузить задания';
+      setTestError(message);
+      if (topicName) {
+        setSelectedTopic(
+          selectedTopic ?? {
+            id: topicName,
+            name: topicName,
+            progress: 0,
+            status: 'pending',
+            priority: 'medium',
+          }
+        );
+        setShowTopicTestModal(true);
+      } else {
+        setShowSubjectModal(true);
+      }
       console.error('Failed to generate test:', error);
     } finally {
       setGeneratingTest(false);
+      setGeneratingTopicName(null);
     }
+  };
+
+  const handleStartLesson = () => {
+    setTestError(null);
+    setShowSubjectModal(true);
+  };
+
+  const handleSubjectSelect = (subjectId: string) => {
+    runTest(subjectId, 'диагностика по предмету', questionCount);
+  };
+
+  const handleTopicTestStart = () => {
+    if (!selectedTopic) return;
+    const label = `Тест по теме «${selectedTopic.name}» · ${data?.subject.name ?? ''}`.trim();
+    runTest(activeSubjectId, label, questionCount, selectedTopic.name);
   };
 
   if (loading) {
@@ -122,18 +253,28 @@ export default function DashboardScreen() {
                   </div>
                 </div>
               </div>
-              <div className="h-24 -mx-6 -mb-6">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={data.chart}>
-                    <Area
-                      type="monotone"
-                      dataKey="score"
-                      stroke="#6D3DF5"
-                      strokeWidth={3}
-                      fill="rgba(109, 61, 245, 0.1)"
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
+              <div className="h-28 -mx-6 -mb-6 min-h-[112px]">
+                {data.chart && data.chart.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={112}>
+                    <AreaChart data={data.chart} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
+                      <XAxis dataKey="day" hide />
+                      <YAxis hide domain={[0, 100]} />
+                      <Area
+                        type="monotone"
+                        dataKey="score"
+                        stroke="#6D3DF5"
+                        strokeWidth={3}
+                        fill="rgba(109, 61, 245, 0.1)"
+                        dot={{ r: 3, fill: '#6D3DF5' }}
+                        isAnimationActive={false}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
+                    Пройдите диагностику для отображения графика
+                  </div>
+                )}
               </div>
             </div>
 
@@ -187,7 +328,7 @@ export default function DashboardScreen() {
                   <div
                     className="h-full rounded-full transition-all"
                     style={{
-                      width: `${data.tasksTotal ? (data.tasksCompleted / data.tasksTotal) * 100 : 0}%`,
+                      width: `${taskProgressPercent}%`,
                       backgroundColor: color,
                     }}
                   />
@@ -203,14 +344,31 @@ export default function DashboardScreen() {
             <div>
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-semibold text-lg">Слабые темы</h3>
-                <button className="text-sm font-medium flex items-center gap-1 text-[#6D3DF5]">
+                <button
+                  type="button"
+                  onClick={() => setShowAllTopicsModal(true)}
+                  className="text-sm font-medium flex items-center gap-1 text-[#6D3DF5] hover:text-[#5b2fe3]"
+                >
                   Все темы
                   <ChevronRight className="size-4" />
                 </button>
               </div>
               <div className="space-y-3">
-                {data.weakTopics.map((topic, index) => (
-                  <div key={index} className="bg-white rounded-2xl p-4 shadow-sm border border-border">
+                {data.weakTopics.map((topic) => (
+                  <button
+                    key={topic.id}
+                    type="button"
+                    onClick={() =>
+                      openTopicTest({
+                        id: topic.id,
+                        name: topic.topic,
+                        progress: topic.progress,
+                        status: 'pending',
+                        priority: 'medium',
+                      })
+                    }
+                    className="w-full bg-white rounded-2xl p-4 shadow-sm border border-border text-left hover:border-[#6D3DF5]/40 hover:bg-[#6D3DF5]/[0.02] transition-colors"
+                  >
                     <div className="flex items-center justify-between mb-3">
                       <span className="font-medium">{topic.topic}</span>
                       <span className="text-sm text-muted-foreground">{topic.progress}%</span>
@@ -224,7 +382,8 @@ export default function DashboardScreen() {
                         }}
                       />
                     </div>
-                  </div>
+                    <p className="text-xs text-[#6D3DF5] mt-2 font-medium">Составить тест по теме</p>
+                  </button>
                 ))}
               </div>
             </div>
@@ -250,35 +409,95 @@ export default function DashboardScreen() {
         </div>
       </div>
 
+      <Dialog open={showAllTopicsModal} onOpenChange={setShowAllTopicsModal}>
+        <DialogContent className="sm:max-w-md max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Все темы · {data.subject.name}</DialogTitle>
+          </DialogHeader>
+          <div className="overflow-y-auto flex-1 -mx-1 px-1 space-y-2 py-2">
+            {allTopics.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-6">
+                Темы появятся после диагностики или в разделе «План».
+              </p>
+            ) : (
+              allTopics.map((topic) => (
+                <button
+                  key={topic.id}
+                  type="button"
+                  onClick={() => openTopicTest(topic)}
+                  className="w-full rounded-xl border border-border p-4 text-left hover:border-[#6D3DF5]/40 hover:bg-[#6D3DF5]/[0.02] transition-colors"
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-medium">{topic.name}</span>
+                    <span className="text-sm text-muted-foreground">{topic.progress}%</span>
+                  </div>
+                  <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-[#6D3DF5]"
+                      style={{ width: `${topic.progress}%` }}
+                    />
+                  </div>
+                  {topic.section && (
+                    <p className="text-xs text-muted-foreground mt-2">{topic.section}</p>
+                  )}
+                </button>
+              ))
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setShowAllTopicsModal(false);
+              onNavigateToPlan();
+            }}
+            className="w-full text-sm font-medium text-[#6D3DF5] py-2 hover:text-[#5b2fe3]"
+          >
+            Открыть подробный план
+          </button>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showTopicTestModal} onOpenChange={setShowTopicTestModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              Тест по теме «{selectedTopic?.name ?? ''}»
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Задания подберутся по этой теме и близким разделам, затем ИИ оформит вопросы с вариантами ответов.
+          </p>
+          <QuestionCountPicker value={questionCount} onChange={setQuestionCount} />
+          {testError && (
+            <p className="text-sm text-destructive py-1">{testError}</p>
+          )}
+          <button
+            type="button"
+            onClick={handleTopicTestStart}
+            disabled={!selectedTopic || generatingTest}
+            className="w-full bg-[#6D3DF5] text-white font-semibold py-3.5 rounded-xl hover:bg-[#5b2fe3] transition-colors disabled:opacity-50"
+          >
+            Начать тест
+          </button>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={showSubjectModal} onOpenChange={setShowSubjectModal}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Выберите предмет для теста</DialogTitle>
           </DialogHeader>
-          <div className="py-2">
-            <p className="text-sm font-medium text-[#707076] mb-2">Количество вопросов</p>
-            <div className="grid grid-cols-4 gap-2">
-              {[3, 5, 8, 10].map((count) => (
-                <button
-                  key={count}
-                  onClick={() => setQuestionCount(count)}
-                  className={`h-11 rounded-xl border font-semibold ${
-                    questionCount === count
-                      ? 'border-[#6D3DF5] bg-[#6D3DF5]/5 text-[#6D3DF5]'
-                      : 'border-border bg-[#F7F7FA] text-muted-foreground'
-                  }`}
-                >
-                  {count}
-                </button>
-              ))}
-            </div>
-          </div>
+          <QuestionCountPicker value={questionCount} onChange={setQuestionCount} />
+          {testError && (
+            <p className="text-sm text-destructive py-2">{testError}</p>
+          )}
           <div className="space-y-3 py-4">
             {subjects.map((subject) => (
               <button
                 key={subject.id}
                 onClick={() => handleSubjectSelect(subject.id)}
-                className="w-full flex items-center gap-4 p-4 rounded-xl border border-border hover:border-[#6D3DF5] hover:bg-[#6D3DF5]/5 transition-colors text-left"
+                disabled={generatingTest}
+                className="w-full flex items-center gap-4 p-4 rounded-xl border border-border hover:border-[#6D3DF5] hover:bg-[#6D3DF5]/5 transition-colors text-left disabled:opacity-50"
               >
                 <div className="size-10 flex items-center justify-center">
                 <SubjectIcon iconName={subject.icon} className="size-6" />
@@ -297,9 +516,15 @@ export default function DashboardScreen() {
         <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-6">
           <div className="bg-white rounded-2xl border border-border shadow-sm p-6 w-full max-w-sm text-center">
             <Loader2 className="size-8 animate-spin text-[#6D3DF5] mx-auto mb-4" />
-            <h3 className="font-semibold text-lg mb-2">Ясно! составляет диагностику</h3>
+            <h3 className="font-semibold text-lg mb-2">
+              {generatingTopicName
+                ? `Составляем тест по теме «${generatingTopicName}»`
+                : 'Ясно! составляет диагностику'}
+            </h3>
             <p className="text-sm text-muted-foreground">
-              Вопросы подберутся по предмету, а после теста слабые темы появятся в плане.
+              {generatingTopicName
+                ? 'Загружаем задания по выбранной теме и готовим вопросы.'
+                : 'Вопросы подберутся по предмету, а после теста слабые темы появятся в плане.'}
             </p>
           </div>
         </div>

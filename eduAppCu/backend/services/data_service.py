@@ -4,6 +4,17 @@ import re
 import time
 from pathlib import Path
 
+TEST_TOPICS_CATEGORY = "Темы после тестов"
+LEGACY_TOPIC_CATEGORIES = {
+    "Критические темы",
+    "AI-рекомендации после теста",
+    "Критические темы и AI-рекомендации",
+    TEST_TOPICS_CATEGORY,
+}
+IN_PROGRESS_CATEGORY = "В процессе"
+COMPLETED_CATEGORY = "Освоенные темы"
+PRIORITY_SECTION_CATEGORY = "Требуют внимания"
+
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
 
@@ -82,29 +93,202 @@ class DataService:
             "explanation": task["explanation"],
         }
 
-    def get_plan(self, subject_id: str):
+    def _apply_topic_override(self, item: dict, overrides: dict) -> dict:
+        topic = copy.deepcopy(item)
+        override = overrides.get(topic["id"]) or overrides.get(topic["name"].casefold())
+        if not override:
+            return topic
+        if override.get("status"):
+            topic["status"] = override["status"]
+        if override.get("progress") is not None:
+            topic["progress"] = int(override["progress"])
+        if topic["status"] == "completed":
+            topic["progress"] = max(topic.get("progress", 0), 100)
+            topic["impact"] = "✓"
+        return topic
+
+    def _collect_test_topic_items(self, plan: dict, stored_topics: list[dict] | None = None) -> list[dict]:
+        items: list[dict] = []
+        seen: set[str] = set()
+
+        def add_item(raw_item: dict) -> None:
+            key = raw_item.get("id") or raw_item.get("name", "").casefold()
+            if not key or key in seen:
+                return
+            seen.add(key)
+            items.append(copy.deepcopy(raw_item))
+
+        if stored_topics:
+            for raw_item in stored_topics:
+                add_item(raw_item)
+
+        for section in plan.get("sections", []):
+            if section.get("category") in LEGACY_TOPIC_CATEGORIES:
+                for raw_item in section.get("items", []):
+                    add_item(raw_item)
+        return items
+
+    def _build_plan_sections(
+        self,
+        topic_items: list[dict],
+        topic_overrides: dict | None = None,
+    ) -> list:
+        overrides = topic_overrides or {}
+        priority_items: list[dict] = []
+        in_progress_items: list[dict] = []
+        completed_items: list[dict] = []
+        seen_priority: set[str] = set()
+        seen_in_progress: set[str] = set()
+        seen_completed: set[str] = set()
+
+        for raw_item in topic_items:
+            item = self._apply_topic_override(raw_item, overrides)
+            key = item["id"]
+            status = item.get("status", "pending")
+            progress = int(item.get("progress", 0))
+
+            if status == "completed" or progress >= 90:
+                if key not in seen_completed:
+                    seen_completed.add(key)
+                    completed_items.append(item)
+                continue
+
+            if status == "in-progress" or progress > 0:
+                if key not in seen_in_progress:
+                    seen_in_progress.add(key)
+                    in_progress_items.append(item)
+                continue
+
+            if key not in seen_priority:
+                seen_priority.add(key)
+                priority_items.append(item)
+
+        sections = []
+        if priority_items:
+            sections.append(
+                {
+                    "category": PRIORITY_SECTION_CATEGORY,
+                    "priority": "high",
+                    "items": priority_items,
+                }
+            )
+        sections.append(
+            {
+                "category": IN_PROGRESS_CATEGORY,
+                "priority": "medium",
+                "items": sorted(in_progress_items, key=lambda x: -x.get("progress", 0)),
+            }
+        )
+        sections.append(
+            {
+                "category": COMPLETED_CATEGORY,
+                "priority": "completed",
+                "items": sorted(completed_items, key=lambda x: -x.get("progress", 0)),
+            }
+        )
+        return sections
+
+    def get_plan(
+        self,
+        subject_id: str,
+        topic_overrides: dict | None = None,
+        stored_topics: list[dict] | None = None,
+    ):
         plan = self.plans.get(subject_id)
         if not plan:
             return None
         subject = self.get_subject(subject_id)
         progress = self.user["progressBySubject"].get(subject_id, {})
+        plan_copy = copy.deepcopy(plan)
+        topic_items = self._collect_test_topic_items(plan_copy, stored_topics)
+        plan_copy["sections"] = self._build_plan_sections(topic_items, topic_overrides)
         return {
             "subject": subject,
             "targetScore": subject["targetScore"] if subject else 0,
             "daysToExam": subject["daysToExam"] if subject else 0,
             "currentScore": progress.get("score", 0),
-            **plan,
+            **plan_copy,
         }
 
-    def get_plan_topics(self, subject_id: str):
-        plan = self.plans.get(subject_id, {})
-        topics = []
+    def update_topic_status(
+        self,
+        subject_id: str,
+        topic_id: str,
+        status: str,
+        *,
+        progress: int | None = None,
+    ) -> dict | None:
+        plan = self.plans.get(subject_id)
+        if not plan:
+            return None
+        valid_statuses = {"completed", "in-progress", "pending"}
+        if status not in valid_statuses:
+            raise ValueError("Invalid status")
+
         for section in plan.get("sections", []):
             for item in section.get("items", []):
-                topics.append(item["name"])
-        return topics
+                if item["id"] == topic_id:
+                    item["status"] = status
+                    if progress is not None:
+                        item["progress"] = max(0, min(100, int(progress)))
+                    elif status == "completed":
+                        item["progress"] = 100
+                        item["impact"] = "✓"
+                    elif status == "in-progress" and item.get("progress", 0) < 10:
+                        item["progress"] = max(item.get("progress", 0), 40)
+                    return copy.deepcopy(item)
+        return None
 
-    def update_plan_from_gaps(self, subject_id: str, gaps: list[str], analysis: str = ""):
+    def get_plan_topics(
+        self,
+        subject_id: str,
+        topic_overrides: dict | None = None,
+        stored_topics: list[dict] | None = None,
+    ):
+        plan = self.get_plan(
+            subject_id,
+            topic_overrides=topic_overrides,
+            stored_topics=stored_topics,
+        )
+        if not plan:
+            return []
+        return [item["name"] for section in plan.get("sections", []) for item in section.get("items", [])]
+
+    def _merge_gaps_into_items(self, items: list[dict], gaps: list[str]) -> list[dict]:
+        merged = copy.deepcopy(items)
+        existing = {item["name"].casefold(): item for item in merged}
+        for index, name in enumerate(gaps[:8]):
+            label = str(name).strip()
+            if not label:
+                continue
+            key = label.casefold()
+            if key in existing:
+                topic = existing[key]
+                topic["status"] = "in-progress"
+                topic["progress"] = min(int(topic.get("progress", 25)), 35)
+                continue
+
+            slug = re.sub(r"[^a-zа-я0-9]+", "-", key, flags=re.IGNORECASE).strip("-")
+            topic = {
+                "id": f"ai-{slug or index}",
+                "name": label,
+                "progress": 25,
+                "status": "in-progress",
+                "impact": "из теста",
+            }
+            merged.append(topic)
+            existing[key] = topic
+        return merged
+
+    def update_plan_from_gaps(
+        self,
+        subject_id: str,
+        gaps: list[str],
+        analysis: str = "",
+        *,
+        user_id: int | None = None,
+        stored_topics: list[dict] | None = None,
+    ):
         plan = self.plans.get(subject_id)
         if not plan:
             return None
@@ -121,81 +305,155 @@ class DataService:
                 seen.add(key)
 
         if not cleaned:
-            return self.get_plan(subject_id)
-
-        section = next(
-            (
-                s
-                for s in plan.get("sections", [])
-                if s.get("category") == "AI-рекомендации после теста"
-            ),
-            None,
-        )
-        if not section:
-            section = {
-                "category": "AI-рекомендации после теста",
-                "priority": "high",
-                "items": [],
-            }
-            plan.setdefault("sections", []).insert(0, section)
-
-        existing = {item["name"].casefold(): item for item in section["items"]}
-        for index, name in enumerate(cleaned[:6]):
-            key = name.casefold()
-            if key in existing:
-                existing[key]["progress"] = min(existing[key].get("progress", 30), 35)
-                existing[key]["status"] = "in-progress"
-                continue
-
-            slug = re.sub(r"[^a-zа-я0-9]+", "-", key, flags=re.IGNORECASE).strip("-")
-            section["items"].append(
-                {
-                    "id": f"ai-{slug or index}",
-                    "name": name,
-                    "progress": 25,
-                    "status": "in-progress",
-                    "impact": "+3 балла",
-                }
+            return self.get_plan(
+                subject_id,
+                stored_topics=stored_topics,
             )
+
+        if user_id is not None:
+            from services.db import merge_plan_topics_from_gaps
+
+            merged_items = merge_plan_topics_from_gaps(user_id, subject_id, cleaned)
+        else:
+            base_items = self._collect_test_topic_items(plan, stored_topics)
+            merged_items = self._merge_gaps_into_items(base_items, cleaned)
+            plan["sections"] = [
+                {
+                    "category": TEST_TOPICS_CATEGORY,
+                    "priority": "high",
+                    "items": merged_items,
+                }
+            ]
 
         if analysis:
             plan["forecast"] = analysis
         plan["weeklyGoal"] = (
-            "Разбери темы из AI-рекомендаций и реши по 3-5 заданий на каждую."
+            f"Закрепи {len(cleaned)} тем из последнего теста — по 3–5 заданий на каждую."
         )
-        plan["weeklyTasksTotal"] = max(plan.get("weeklyTasksTotal", 0), len(cleaned))
-        return self.get_plan(subject_id)
+        plan["weeklyTasksTotal"] = max(len(merged_items), len(cleaned))
+        plan["weeklyTasksDone"] = min(
+            int(plan.get("weeklyTasksDone", 0)) + 1,
+            plan["weeklyTasksTotal"],
+        )
+        plan["weeklyProgress"] = (
+            round(plan["weeklyTasksDone"] / plan["weeklyTasksTotal"] * 100)
+            if plan["weeklyTasksTotal"]
+            else 0
+        )
+        return self.get_plan(
+            subject_id,
+            stored_topics=merged_items if user_id is not None else None,
+        )
 
-    def get_dashboard(self, subject_id: str):
+    def list_plan_topics(
+        self,
+        subject_id: str,
+        topic_overrides: dict | None = None,
+        stored_topics: list[dict] | None = None,
+    ) -> list:
+        plan = self.get_plan(
+            subject_id,
+            topic_overrides=topic_overrides,
+            stored_topics=stored_topics,
+        )
+        if not plan:
+            return []
+        topics = []
+        for section in plan.get("sections", []):
+            for item in section.get("items", []):
+                topics.append(
+                    {
+                        "id": item["id"],
+                        "name": item["name"],
+                        "progress": item.get("progress", 0),
+                        "status": item.get("status", "pending"),
+                        "priority": section.get("priority", "medium"),
+                        "section": section.get("category", ""),
+                    }
+                )
+        return topics
+
+    def record_test_task_progress(
+        self,
+        subject_id: str,
+        *,
+        correct_count: int,
+        total_count: int,
+        plan_topic_count: int = 0,
+    ) -> None:
+        by_subject = self.user.setdefault("taskProgressBySubject", {})
+        entry = dict(by_subject.get(subject_id, {}))
+        entry["correct"] = int(entry.get("correct", 0)) + max(0, correct_count)
+        entry["answered"] = int(entry.get("answered", 0)) + max(0, total_count)
+        entry["tests"] = int(entry.get("tests", 0)) + 1
+        entry["goal"] = max(int(entry.get("goal", 0)), plan_topic_count, 5)
+        by_subject[subject_id] = entry
+
+    def _task_progress_metrics(
+        self,
+        subject_id: str,
+        all_topics: list,
+        tasks: list,
+        done_ids: set[str],
+        subject_task_stats: dict | None = None,
+    ) -> tuple[int, int]:
+        static_done = len([t for t in tasks if t["id"] in done_ids])
+        topics_done = len([t for t in all_topics if t.get("status") == "completed"])
+        stats = subject_task_stats or {}
+        local_stats = (self.user.get("taskProgressBySubject") or {}).get(subject_id, {})
+        test_correct = int(stats.get("correct") or local_stats.get("correct") or 0)
+
+        tasks_total = max(
+            len(tasks),
+            len(all_topics),
+            int(stats.get("goal") or local_stats.get("goal") or 0),
+            1,
+        )
+        tasks_completed = min(
+            max(static_done, topics_done, test_correct),
+            tasks_total,
+        )
+        return tasks_completed, tasks_total
+
+    def get_dashboard(
+        self,
+        subject_id: str,
+        topic_overrides: dict | None = None,
+        stored_topics: list[dict] | None = None,
+        completed_task_ids: list[str] | None = None,
+        subject_task_stats: dict | None = None,
+    ):
         subject = self.get_subject(subject_id)
         if not subject:
             return None
         progress = self.user["progressBySubject"].get(subject_id, {})
-        plan = self.plans.get(subject_id, {})
-        weak = []
-        for section in plan.get("sections", []):
-            if section["priority"] in ("high", "medium"):
-                for item in section["items"]:
-                    if item["status"] != "completed":
-                        weak.append(
-                            {
-                                "topic": item["name"],
-                                "progress": item["progress"],
-                                "color": subject["color"],
-                            }
-                        )
+        all_topics = self.list_plan_topics(
+            subject_id,
+            topic_overrides=topic_overrides,
+            stored_topics=stored_topics,
+        )
+        weak = [
+            {
+                "id": t["id"],
+                "topic": t["name"],
+                "progress": t["progress"],
+                "color": subject["color"],
+            }
+            for t in all_topics
+            if t.get("status") != "completed"
+        ]
         weak = sorted(weak, key=lambda x: x["progress"])[:3]
         tasks = self.get_tasks(subject_id)
-        completed = len(
-            [t for t in tasks if t["id"] in self.user["completedTaskIds"]]
+        done_ids = set(completed_task_ids or self.user["completedTaskIds"])
+        tasks_completed, tasks_total = self._task_progress_metrics(
+            subject_id,
+            all_topics,
+            tasks,
+            done_ids,
+            subject_task_stats=subject_task_stats,
         )
-        pending_topics = sum(
-            1
-            for s in plan.get("sections", [])
-            for i in s.get("items", [])
-            if i["status"] != "completed"
-        )
-        top_weak = weak[0]["topic"] if weak else "слабым темам"
+        pending_topics = len([t for t in all_topics if t.get("status") != "completed"])
+        top_weak = weak[0]["topic"] if weak else None
         return {
             "userName": self.user["userName"],
             "subject": subject,
@@ -208,13 +466,16 @@ class DataService:
             "streak": self.user["streak"],
             "achievements": self.user["achievements"],
             "weakTopics": weak,
+            "allTopics": all_topics,
             "recommendation": (
                 f"Сегодня стоит уделить внимание теме «{top_weak}» — "
                 f"ты близок к прорыву! Решение 5–7 задач поможет закрепить материал."
+                if top_weak
+                else "Пройди AI-тест — после разбора ответов слабые темы появятся в плане и на главной."
             ),
             "dailyPlanRemaining": pending_topics,
-            "tasksTotal": len(tasks),
-            "tasksCompleted": completed,
+            "tasksTotal": tasks_total,
+            "tasksCompleted": tasks_completed,
         }
 
     def chat_reply(self, message: str, subject_id: str):
@@ -222,27 +483,8 @@ class DataService:
         subject = self.get_subject(subject_id)
         name = subject["name"] if subject else "предмет"
         topics = self.get_plan_topics(subject_id)[:5]
-        topic_hint = ", ".join(topics) if topics else "ключевые темы предмета"
+        topic_hint = ", ".join(topics) if topics else "темы из вашего плана после тестов"
 
-        if any(w in msg for w in ("линз", "оптик", "свет")):
-            return (
-                f"По {name}: линзы — прозрачные тела, собирающие или рассеивающие свет.\n\n"
-                "**Собирающая линза** — толще в центре, фокус реальный.\n"
-                "**Рассеивающая** — тоньше в центре.\n\n"
-                "Формула: 1/F = 1/d + 1/f\n\n"
-                "Хочешь мини-тест по этой теме?"
-            )
-        if any(w in msg for w in ("производн", "дифференц")):
-            return (
-                f"Производная в {name}: (xⁿ)' = n·xⁿ⁻¹. "
-                "Проверь знак и степень после дифференцирования. "
-                "Могу подобрать 3 задачи для тренировки."
-            )
-        if any(w in msg for w in ("дат", "год", "век", "истор")):
-            return (
-                "Для истории составь таблицу: событие — дата — последствия. "
-                "Повтори 1861, 1914, 1917 — они часто встречаются на ЕГЭ."
-            )
         if any(w in msg for w in ("тест", "мини")):
             tasks = self.get_tasks(subject_id)[:3]
             titles = ", ".join(t["topic"] for t in tasks)

@@ -8,6 +8,11 @@ const subjectLabels: Record<string, string> = {
   history: 'История',
   chemistry: 'Химия',
   informatics: 'Информатика',
+  biology: 'Биология',
+  geography: 'География',
+  literature: 'Литература',
+  french: 'Французский язык',
+  social: 'Обществознание',
 };
 
 export default function ProfileScreen() {

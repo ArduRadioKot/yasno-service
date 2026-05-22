@@ -9,20 +9,74 @@ import type {
   TaskCheckResult,
 } from '../types';
 
-// Store AI-generated test data
+const AI_TEST_KEY = 'edu-ai-test-data';
+const AI_TEST_RESULTS_KEY = 'edu-ai-test-results';
+
 let aiTestData: AiTestData | null = null;
 
 export const setAiTestData = (data: typeof aiTestData) => {
   aiTestData = data;
+  if (data) {
+    sessionStorage.setItem(AI_TEST_KEY, JSON.stringify(data));
+    clearTestResults();
+  } else {
+    sessionStorage.removeItem(AI_TEST_KEY);
+  }
 };
 
-export const getAiTestData = () => aiTestData;
+export const getAiTestData = (): AiTestData | null => {
+  if (aiTestData) return aiTestData;
+  const saved = sessionStorage.getItem(AI_TEST_KEY);
+  if (!saved) return null;
+  try {
+    aiTestData = JSON.parse(saved) as AiTestData;
+    return aiTestData;
+  } catch {
+    return null;
+  }
+};
 
 export const clearAiTestData = () => {
   aiTestData = null;
+  sessionStorage.removeItem(AI_TEST_KEY);
+};
+
+export const saveTestResults = (payload: {
+  analysis: AiTestAnalysis;
+  answers: AiTestAnswer[];
+}) => {
+  sessionStorage.setItem(AI_TEST_RESULTS_KEY, JSON.stringify(payload));
+};
+
+export const getTestResults = (): {
+  analysis: AiTestAnalysis;
+  answers: AiTestAnswer[];
+} | null => {
+  const saved = sessionStorage.getItem(AI_TEST_RESULTS_KEY);
+  if (!saved) return null;
+  try {
+    return JSON.parse(saved) as { analysis: AiTestAnalysis; answers: AiTestAnswer[] };
+  } catch {
+    return null;
+  }
+};
+
+export const clearTestResults = () => {
+  sessionStorage.removeItem(AI_TEST_RESULTS_KEY);
+};
+
+export const notifyTestComplete = () => {
+  window.dispatchEvent(new CustomEvent('edu-test-complete'));
 };
 
 const API_BASE = '/api';
+
+function sanitizeUserMessage(message: string): string {
+  return message
+    .replace(/sdamgia\.ru/gi, 'банка заданий')
+    .replace(/sdamgia/gi, 'банка заданий')
+    .replace(/sdamgia-api/gi, 'сервис заданий');
+}
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
@@ -31,12 +85,15 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error((err as { error?: string }).error || `HTTP ${res.status}`);
+    const raw = (err as { error?: string }).error || `HTTP ${res.status}`;
+    throw new Error(sanitizeUserMessage(raw));
   }
   return res.json() as Promise<T>;
 }
 
 export const api = {
+  health: () => request<{ status: string }>('/health'),
+
   getSubjects: (email?: string) =>
     request<{ subjects: Subject[]; activeSubjectId: string }>(
       email ? `/subjects?email=${encodeURIComponent(email)}` : '/subjects'
@@ -68,8 +125,22 @@ export const api = {
       email ? `/dashboard?subjectId=${subjectId}&email=${encodeURIComponent(email)}` : `/dashboard?subjectId=${subjectId}`
     ),
 
-  getPlan: (subjectId: string) =>
-    request<PlanData>(`/plan?subjectId=${subjectId}`),
+  getPlan: (subjectId: string, email?: string) =>
+    request<PlanData>(
+      `/plan?subjectId=${subjectId}${email ? `&email=${encodeURIComponent(email)}` : ''}`
+    ),
+
+  updatePlanTopic: (
+    topicId: string,
+    subjectId: string,
+    status: 'completed' | 'in-progress' | 'pending',
+    email?: string,
+    progress?: number
+  ) =>
+    request<PlanData>(`/plan/topics/${topicId}?subjectId=${subjectId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ subjectId, status, email, progress }),
+    }),
 
   getTask: (taskId: string, subjectId: string) =>
     request<Task>(`/tasks/${taskId}?subjectId=${subjectId}`),
@@ -86,10 +157,10 @@ export const api = {
     return api.getTask(tasks[0].id, subjectId);
   },
 
-  checkTask: (taskId: string, answerId: number) =>
+  checkTask: (taskId: string, answerId: number, email?: string) =>
     request<TaskCheckResult>(`/tasks/${taskId}/check`, {
       method: 'POST',
-      body: JSON.stringify({ answerId }),
+      body: JSON.stringify({ answerId, ...(email ? { email } : {}) }),
     }),
 
   getNextTask: (taskId: string, subjectId: string) =>
@@ -106,17 +177,27 @@ export const api = {
       `/chat/suggestions?subjectId=${subjectId}`
     ),
 
-  chat: (message: string, subjectId?: string) =>
-    request<{ response: string }>('/chat', {
+  chat: (message: string, subjectId?: string, taskContext?: string) =>
+    request<{ role: string; content: string }>('/chat', {
       method: 'POST',
-      body: JSON.stringify({ message, subjectId }),
+      body: JSON.stringify({ message, subjectId, taskContext }),
     }),
 
-  generateTest: (subjectId: string, topic = 'диагностика по предмету', count = 5, email?: string) =>
-    request<AiTestData>(
-      `/generate-test?subjectId=${subjectId}&topic=${encodeURIComponent(topic)}&count=${count}${email ? `&email=${encodeURIComponent(email)}` : ''}`,
-      { method: 'POST' }
-    ),
+  generateTest: (
+    subjectId: string,
+    topic = 'диагностика по предмету',
+    count = 5,
+    topicName?: string
+  ) =>
+    request<AiTestData>('/generate-test', {
+      method: 'POST',
+      body: JSON.stringify({
+        subjectId,
+        topic,
+        count,
+        ...(topicName ? { topicName } : {}),
+      }),
+    }),
 
   generateTestWithSubjects: (subjectIds: string[], topic = 'диагностика по предмету', count = 3, email?: string) =>
     request<AiTestData>('/generate-test', {
@@ -124,12 +205,17 @@ export const api = {
       body: JSON.stringify({ subjectIds, topic, count, email }),
     }),
 
-  analyzeTestResults: (subjectId: string, answers: AiTestAnswer[], subjectIds?: string[], email?: string) =>
+  analyzeTestResults: (
+    subjectId: string,
+    answers: AiTestAnswer[],
+    subjectIds?: string[],
+    email?: string
+  ) =>
     request<AiTestAnalysis>(
       `/analyze-test?subjectId=${subjectId}${email ? `&email=${encodeURIComponent(email)}` : ''}`,
       {
         method: 'POST',
-        body: JSON.stringify({ answers, subjectIds, email }),
+        body: JSON.stringify({ answers, subjectIds, subjectId, email }),
       }
     ),
 };
