@@ -27,4 +27,6 @@ dist-ssr
 .venv
 .env
 api.txt
-data
+/eduAppCu/data
+/eduAppCu/backend/data
+edu_app.db

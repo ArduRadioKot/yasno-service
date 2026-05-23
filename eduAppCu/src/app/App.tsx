@@ -120,7 +120,14 @@ export default function App() {
   const [account, setAccount] = useState<UserAccount | null>(() => {
     if (!localStorage.getItem(SESSION_KEY)) return null;
     const saved = localStorage.getItem(ACCOUNT_KEY);
-    return saved ? (JSON.parse(saved) as UserAccount) : null;
+    if (!saved) return null;
+    try {
+      return JSON.parse(saved) as UserAccount;
+    } catch {
+      localStorage.removeItem(ACCOUNT_KEY);
+      localStorage.removeItem(SESSION_KEY);
+      return null;
+    }
   });
 
   const handleAuthComplete = (nextAccount: UserAccount, options?: { startDiagnostic?: boolean }) => {

@@ -99,6 +99,20 @@ export const api = {
       email ? `/subjects?email=${encodeURIComponent(email)}` : '/subjects'
     ),
 
+  login: (data: { email: string; password: string }) =>
+    request<{
+      email: string;
+      firstName: string;
+      lastName: string;
+      examType: string;
+      marketing: boolean;
+      subjects: string[];
+      targets: Record<string, number>;
+    }>('/login', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
   register: (data: {
     email: string;
     password: string;

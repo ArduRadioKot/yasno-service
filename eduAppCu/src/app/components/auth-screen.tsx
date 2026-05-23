@@ -112,6 +112,7 @@ export default function AuthScreen({ onComplete }: AuthScreenProps) {
   const [repeatPassword, setRepeatPassword] = useState('');
   const [offerAccepted, setOfferAccepted] = useState(false);
   const [subjectsOpen, setSubjectsOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const selectedSubjectsText = useMemo(
     () => account.subjects.map((id) => subjectLabels[id]).join(', '),
@@ -142,22 +143,51 @@ export default function AuthScreen({ onComplete }: AuthScreenProps) {
     }
   };
 
-  const handleLogin = () => {
-    const saved = localStorage.getItem(ACCOUNT_KEY);
-    const savedAccount = saved ? (JSON.parse(saved) as UserAccount) : null;
-    if (!account.email.trim() || !account.password.trim()) {
+  const handleLogin = async () => {
+    const email = account.email.trim();
+    const password = account.password;
+    if (!email || !password) {
       setError('Введите почту и пароль');
       return;
     }
-    if (savedAccount && savedAccount.email === account.email && savedAccount.password === account.password) {
-      onComplete(savedAccount);
-      return;
+
+    setLoading(true);
+    setError('');
+    try {
+      const user = await api.login({ email, password });
+      const nextAccount: UserAccount = {
+        email: user.email,
+        password,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        examType: user.examType === 'ОГЭ' ? 'ОГЭ' : 'ЕГЭ',
+        subjects: user.subjects.length ? user.subjects : ['math'],
+        targets: user.targets,
+        marketing: user.marketing,
+      };
+      localStorage.setItem(ACCOUNT_KEY, JSON.stringify(nextAccount));
+      onComplete(nextAccount);
+    } catch (loginError) {
+      try {
+        const saved = localStorage.getItem(ACCOUNT_KEY);
+        const savedAccount = saved ? (JSON.parse(saved) as UserAccount) : null;
+        if (
+          savedAccount &&
+          savedAccount.email === email &&
+          savedAccount.password === password
+        ) {
+          onComplete(savedAccount);
+          return;
+        }
+      } catch {
+        // ignore corrupted local account cache
+      }
+      setError(
+        loginError instanceof Error ? loginError.message : 'Не удалось войти в аккаунт'
+      );
+    } finally {
+      setLoading(false);
     }
-    if (!savedAccount) {
-      setError('Аккаунт не найден. Создайте аккаунт');
-      return;
-    }
-    setError('Почта или пароль не совпадают');
   };
 
   const handleRegisterNext = () => {
@@ -235,8 +265,13 @@ export default function AuthScreen({ onComplete }: AuthScreenProps) {
                 <Field label="Пароль" placeholder="пароль" type="password" value={account.password} onChange={(password) => update({ password })} withEye />
               </div>
               {error && <p className="text-sm text-destructive mt-4">{error}</p>}
-              <button onClick={handleLogin} className="w-full h-13 mt-5 rounded-xl bg-[#6D3DF5] text-white font-semibold">
-                Войти с помощью почты
+              <button
+                type="button"
+                onClick={handleLogin}
+                disabled={loading}
+                className="w-full h-13 mt-5 rounded-xl bg-[#6D3DF5] text-white font-semibold disabled:opacity-60"
+              >
+                {loading ? 'Входим…' : 'Войти с помощью почты'}
               </button>
               <div className="flex items-center gap-3 my-8 text-sm text-[#9A9AA2]">
                 <div className="h-px bg-[#D8D8DD] flex-1" />

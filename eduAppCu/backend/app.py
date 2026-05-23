@@ -333,6 +333,39 @@ def health():
     return jsonify({"status": "ok"})
 
 
+@app.post("/api/login")
+def login():
+    body = request.get_json(silent=True) or {}
+    email = (body.get("email") or "").strip()
+    password = body.get("password") or ""
+
+    if not email or not password:
+        return jsonify({"error": "Введите почту и пароль"}), 400
+
+    user = get_user_by_email(email)
+    if not user:
+        return jsonify({"error": "Аккаунт не найден. Создайте аккаунт"}), 401
+
+    if user.get("password") != password:
+        return jsonify({"error": "Почта или пароль не совпадают"}), 401
+
+    subjects = get_user_subjects(user["id"])
+    targets = get_user_targets(user["id"])
+    exam_type = normalize_exam_type(user.get("exam_type"))
+
+    return jsonify(
+        {
+            "email": user["email"],
+            "firstName": user.get("first_name") or "",
+            "lastName": user.get("last_name") or "",
+            "examType": exam_type,
+            "marketing": bool(user.get("marketing")),
+            "subjects": subjects,
+            "targets": targets,
+        }
+    )
+
+
 @app.post("/api/register")
 def register():
     body = request.get_json(silent=True) or {}
