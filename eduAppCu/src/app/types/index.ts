@@ -127,6 +127,9 @@ export type PlanData = {
   targetScore: number;
   daysToExam: number;
   currentScore: number;
+  scoreProgress?: number;
+  examType?: 'ОГЭ' | 'ЕГЭ';
+  scoreLabel?: string;
   milestones: { date: string; score: number; current: boolean }[];
   forecast: string;
   weeklyGoal: string;

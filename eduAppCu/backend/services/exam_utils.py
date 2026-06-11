@@ -65,6 +65,19 @@ def normalize_target_score(score: int | float | None, exam_type: str | None) -> 
     return max(0, min(100, value))
 
 
+def score_to_progress_percent(current: int, target: int, exam_type: str | None) -> int:
+    """Convert exam score/grade to 0–100 progress toward target."""
+    current = int(current or 0)
+    target = int(target or 0)
+    if is_oge(exam_type):
+        if target <= 2:
+            return 0
+        return max(0, min(100, round((current - 2) / (target - 2) * 100)))
+    if target <= 0:
+        return 0
+    return max(0, min(100, round(current / target * 100)))
+
+
 def ai_exam_prompt(exam_type: str | None) -> str:
     if is_oge(exam_type):
         return (

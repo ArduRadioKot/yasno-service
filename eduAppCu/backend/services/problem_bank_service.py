@@ -11,7 +11,12 @@ from services.db import (
     init_problem_bank_table,
     insert_problem_bank_batch,
 )
-from services.content_utils import plain_text_from_content, rich_content_to_html
+from services.content_utils import (
+    plain_text_from_content,
+    resolve_sdamgia_image_urls,
+    rich_content_to_html,
+    sdamgia_base_from_url,
+)
 from services.exam_utils import is_oge as exam_is_oge, normalize_exam_type
 from services.oge_sdamgia_client import OgeSdamGIA, SUBJECT_TO_OGE_HOST
 
@@ -75,6 +80,51 @@ _TOPIC_STOPWORDS = {
 
 class ProblemBankError(Exception):
     """Задачи не удалось получить только с sdamgia.ru."""
+
+
+def infer_sdamgia_base_url(
+    subject_id: str,
+    external_id: str,
+    exam_type: str = "ЕГЭ",
+    url: str = "",
+) -> str:
+    base = sdamgia_base_from_url(url)
+    if base:
+        return base
+    pid = external_id[4:] if str(external_id).startswith("oge-") else str(external_id)
+    if not subject_id or not pid:
+        return ""
+    exam_type = normalize_exam_type(exam_type)
+    if exam_is_oge(exam_type):
+        host = SUBJECT_TO_OGE_HOST.get(subject_id)
+    else:
+        code = SUBJECT_TO_SDAMGIA.get(subject_id)
+        host = f"{code}-ege" if code else None
+    return f"https://{host}.sdamgia.ru" if host else ""
+
+
+def _prepare_problem_row(row: dict, subject_id: str, exam_type: str) -> dict:
+    prepared = dict(row)
+    external_id = str(prepared.get("external_id") or "")
+    base = infer_sdamgia_base_url(
+        subject_id,
+        external_id,
+        exam_type=exam_type,
+        url=str(prepared.get("url") or ""),
+    )
+    if base:
+        if prepared.get("condition"):
+            prepared["condition"] = resolve_sdamgia_image_urls(
+                str(prepared["condition"]), base
+            )
+        if prepared.get("solution"):
+            prepared["solution"] = resolve_sdamgia_image_urls(
+                str(prepared["solution"]), base
+            )
+        if not prepared.get("url"):
+            pid = external_id[4:] if external_id.startswith("oge-") else external_id
+            prepared["url"] = f"{base}/problem?id={pid}"
+    return prepared
 
 
 def _topic_tokens(text: str) -> set[str]:
@@ -188,8 +238,9 @@ def _normalize_problem_row(
 
     condition_raw = row.get("conditionHtml") or row.get("condition")
     solution_raw = row.get("solutionHtml") or row.get("solution")
-    condition_html = rich_content_to_html(condition_raw)
-    solution_html = rich_content_to_html(solution_raw)
+    base_url = sdamgia_base_from_url(str(row.get("url") or ""))
+    condition_html = rich_content_to_html(condition_raw, base_url=base_url)
+    solution_html = rich_content_to_html(solution_raw, base_url=base_url)
 
     return {
         "subject_id": subject_id,
@@ -301,7 +352,8 @@ def _fetch_problems_from_categories(
                 continue
 
             condition_raw = problem_data.get("conditionHtml") or problem_data.get("condition")
-            condition_html = rich_content_to_html(condition_raw)
+            base_url = sdamgia_base_from_url(str(problem_data.get("url") or ""))
+            condition_html = rich_content_to_html(condition_raw, base_url=base_url)
             condition_plain = plain_text_from_content(condition_raw)
             if len(condition_plain) < 10 and "<img" not in condition_html.lower():
                 continue
@@ -428,7 +480,7 @@ def get_problems_for_test(
             if len(condition_plain) < 10 and "<img" not in condition.lower():
                 continue
             seen.add(eid)
-            collected.append(row)
+            collected.append(_prepare_problem_row(row, subject_id, exam_type))
 
     live = _fetch_from_sdamgia(
         subject_id, fetch_batch, topic_filter=topic_filter, exam_type=exam_type

@@ -15,6 +15,8 @@ import { useApp } from '../context/AppContext';
 import { clampTargetForExam, formatTargetLong } from '../utils/exam';
 import type { PlanData, PlanSection, PlanTopic } from '../types';
 import SubjectSelector from './subject-selector';
+import { LoadingProgress } from './LoadingProgress';
+import { formatExamScore } from '../utils/exam';
 
 const PRIORITY_CATEGORY = 'Требуют внимания';
 const IN_PROGRESS_CATEGORY = 'В процессе';
@@ -137,11 +139,11 @@ export default function PlanScreen() {
   const loadPlan = useCallback(() => {
     setLoading(true);
     return api
-      .getPlan(activeSubjectId, account.email)
+      .getPlan(activeSubjectId, account.email, account.examType)
       .then((data) => setPlan(data))
       .catch(() => setPlan(null))
       .finally(() => setLoading(false));
-  }, [activeSubjectId, account.email]);
+  }, [activeSubjectId, account.email, account.examType]);
 
   useEffect(() => {
     let cancelled = false;
@@ -184,6 +186,12 @@ export default function PlanScreen() {
       (inProgressSection?.items.length ?? 0) +
       (completedSection?.items.length ?? 0) >
     0;
+
+  const isOge = (plan?.examType ?? account.examType) === 'ОГЭ';
+  const scoreProgress = plan?.scoreProgress ?? 0;
+  const currentScoreLabel = plan
+    ? formatExamScore(plan.currentScore, isOge ? 'ОГЭ' : 'ЕГЭ')
+    : '—';
 
   return (
     <div className="h-full overflow-y-auto pb-6 md:pb-8 bg-[#F3F4F6]">
@@ -268,10 +276,12 @@ export default function PlanScreen() {
                     <div className="h-2 bg-muted rounded-full flex-1 overflow-hidden">
                       <div
                         className="h-full bg-[#6D3DF5] rounded-full transition-all"
-                        style={{ width: `${plan.currentScore}%` }}
+                        style={{ width: `${scoreProgress}%` }}
                       />
                     </div>
-                    <span className="text-[#6D3DF5] font-semibold text-sm">{plan.currentScore}%</span>
+                    <span className="text-[#6D3DF5] font-semibold text-sm whitespace-nowrap">
+                      {currentScoreLabel}
+                    </span>
                   </div>
                 </div>
               </div>

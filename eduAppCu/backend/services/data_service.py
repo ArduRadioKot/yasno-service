@@ -195,6 +195,12 @@ class DataService:
         subject_id: str,
         topic_overrides: dict | None = None,
         stored_topics: list[dict] | None = None,
+        *,
+        plan_meta: dict | None = None,
+        current_score: int | None = None,
+        target_score: int | None = None,
+        score_progress: int | None = None,
+        exam_type: str = "ЕГЭ",
     ):
         plan = self.plans.get(subject_id)
         if not plan:
@@ -204,11 +210,36 @@ class DataService:
         plan_copy = copy.deepcopy(plan)
         topic_items = self._collect_test_topic_items(plan_copy, stored_topics)
         plan_copy["sections"] = self._build_plan_sections(topic_items, topic_overrides)
+
+        if plan_meta:
+            if plan_meta.get("forecast"):
+                plan_copy["forecast"] = plan_meta["forecast"]
+            if plan_meta.get("weeklyGoal"):
+                plan_copy["weeklyGoal"] = plan_meta["weeklyGoal"]
+            if plan_meta.get("weeklyProgress") is not None:
+                plan_copy["weeklyProgress"] = int(plan_meta["weeklyProgress"])
+            if plan_meta.get("weeklyTasksDone") is not None:
+                plan_copy["weeklyTasksDone"] = int(plan_meta["weeklyTasksDone"])
+            if plan_meta.get("weeklyTasksTotal") is not None:
+                plan_copy["weeklyTasksTotal"] = int(plan_meta["weeklyTasksTotal"])
+
+        resolved_target = target_score if target_score is not None else (
+            subject["targetScore"] if subject else 0
+        )
+        resolved_score = current_score if current_score is not None else progress.get("score", 0)
+
+        from services.exam_utils import exam_score_label, score_to_progress_percent
+
         return {
             "subject": subject,
-            "targetScore": subject["targetScore"] if subject else 0,
+            "targetScore": resolved_target,
             "daysToExam": subject["daysToExam"] if subject else 0,
-            "currentScore": progress.get("score", 0),
+            "currentScore": resolved_score,
+            "scoreProgress": score_progress if score_progress is not None else score_to_progress_percent(
+                resolved_score, resolved_target, exam_type
+            ),
+            "examType": exam_type,
+            "scoreLabel": exam_score_label(exam_type),
             **plan_copy,
         }
 
@@ -307,15 +338,55 @@ class DataService:
                 seen.add(key)
 
         if not cleaned:
+            if user_id is not None and analysis:
+                from services.db import save_user_plan_meta
+
+                save_user_plan_meta(user_id, subject_id, {"forecast": analysis})
+                plan = self.plans.get(subject_id)
+                if plan:
+                    plan["forecast"] = analysis
             return self.get_plan(
                 subject_id,
                 stored_topics=stored_topics,
             )
 
         if user_id is not None:
-            from services.db import merge_plan_topics_from_gaps
+            from services.db import (
+                get_user_plan_meta,
+                merge_plan_topics_from_gaps,
+                save_user_plan_meta,
+            )
 
             merged_items = merge_plan_topics_from_gaps(user_id, subject_id, cleaned)
+            existing_meta = get_user_plan_meta(user_id, subject_id)
+            weekly_tasks_total = max(len(merged_items), len(cleaned))
+            weekly_tasks_done = min(
+                int(existing_meta.get("weeklyTasksDone") or 0) + 1,
+                weekly_tasks_total,
+            )
+            weekly_goal = (
+                f"Закрепи {len(cleaned)} тем из последнего теста — по 3–5 заданий на каждую."
+            )
+            weekly_progress = (
+                round(weekly_tasks_done / weekly_tasks_total * 100)
+                if weekly_tasks_total
+                else 0
+            )
+            meta = {
+                "weeklyGoal": weekly_goal,
+                "weeklyTasksTotal": weekly_tasks_total,
+                "weeklyTasksDone": weekly_tasks_done,
+                "weeklyProgress": weekly_progress,
+            }
+            if analysis:
+                meta["forecast"] = analysis
+            save_user_plan_meta(user_id, subject_id, meta)
+            plan["weeklyGoal"] = weekly_goal
+            plan["weeklyTasksTotal"] = weekly_tasks_total
+            plan["weeklyTasksDone"] = weekly_tasks_done
+            plan["weeklyProgress"] = weekly_progress
+            if analysis:
+                plan["forecast"] = analysis
         else:
             base_items = self._collect_test_topic_items(plan, stored_topics)
             merged_items = self._merge_gaps_into_items(base_items, cleaned)
@@ -326,22 +397,21 @@ class DataService:
                     "items": merged_items,
                 }
             ]
-
-        if analysis:
-            plan["forecast"] = analysis
-        plan["weeklyGoal"] = (
-            f"Закрепи {len(cleaned)} тем из последнего теста — по 3–5 заданий на каждую."
-        )
-        plan["weeklyTasksTotal"] = max(len(merged_items), len(cleaned))
-        plan["weeklyTasksDone"] = min(
-            int(plan.get("weeklyTasksDone", 0)) + 1,
-            plan["weeklyTasksTotal"],
-        )
-        plan["weeklyProgress"] = (
-            round(plan["weeklyTasksDone"] / plan["weeklyTasksTotal"] * 100)
-            if plan["weeklyTasksTotal"]
-            else 0
-        )
+            if analysis:
+                plan["forecast"] = analysis
+            plan["weeklyGoal"] = (
+                f"Закрепи {len(cleaned)} тем из последнего теста — по 3–5 заданий на каждую."
+            )
+            plan["weeklyTasksTotal"] = max(len(merged_items), len(cleaned))
+            plan["weeklyTasksDone"] = min(
+                int(plan.get("weeklyTasksDone", 0)) + 1,
+                plan["weeklyTasksTotal"],
+            )
+            plan["weeklyProgress"] = (
+                round(plan["weeklyTasksDone"] / plan["weeklyTasksTotal"] * 100)
+                if plan["weeklyTasksTotal"]
+                else 0
+            )
         return self.get_plan(
             subject_id,
             stored_topics=merged_items if user_id is not None else None,

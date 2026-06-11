@@ -99,15 +99,15 @@ class OgeSdamGIA:
                 ids.append(parts[-1].rstrip(".)"))
         return ids
 
-    def _extract_html(self, element) -> str:
-        """Extract HTML content while preserving images and formatting."""
+    def _extract_html(self, element, base_url: str = "") -> str:
+        """Extract inner HTML while preserving images and resolving relative URLs."""
         if element is None:
             return ""
-        # Convert element to string to preserve HTML structure
-        html = str(element)
-        # Clean up excessive whitespace but preserve structure
-        html = re.sub(r"\s+", " ", html)
-        return html.strip()
+        from services.content_utils import resolve_sdamgia_image_urls
+
+        html = element.decode_contents() if hasattr(element, "decode_contents") else str(element)
+        html = re.sub(r"\s+", " ", html).strip()
+        return resolve_sdamgia_image_urls(html, base_url)
 
     def _extract_text(self, element) -> str:
         """Extract plain text (fallback)."""
@@ -125,8 +125,8 @@ class OgeSdamGIA:
             return None
 
         bodies = prob_block.find_all("div", {"class": "pbody"})
-        condition = self._extract_html(bodies[0]) if bodies else ""
-        solution = self._extract_html(bodies[1]) if len(bodies) > 1 else ""
+        condition = self._extract_html(bodies[0], base) if bodies else ""
+        solution = self._extract_html(bodies[1], base) if len(bodies) > 1 else ""
 
         answer_el = prob_block.find("div", {"class": "answer"})
         answer = self._extract_text(answer_el)

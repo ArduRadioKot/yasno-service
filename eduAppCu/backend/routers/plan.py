@@ -4,11 +4,14 @@ from fastapi import APIRouter, Query, HTTPException, status
 from typing import Optional, Dict, Any
 from schemas import UpdatePlanTopicRequest
 from services.data_service import data_service
+from services.exam_utils import normalize_exam_type
 from services.db import (
     get_user_by_email,
     get_user_settings,
     get_topic_progress,
     get_user_plan_topics,
+    get_user_plan_meta,
+    get_user_targets,
     set_topic_progress,
     update_plan_topic_entry,
     get_user_progress,
@@ -105,23 +108,44 @@ async def dashboard(
 @router.get("/plan")
 async def plan(
     subjectId: Optional[str] = Query(None),
-    email: Optional[str] = Query(None)
+    email: Optional[str] = Query(None),
+    examType: Optional[str] = Query(None),
 ) -> Dict[str, Any]:
     """Get plan for a subject"""
     subject_id = subjectId or data_service.get_active_subject_id()
     topic_overrides = None
     stored_topics = None
-    
+    plan_meta = None
+    current_score = None
+    target_score = None
+    exam_type = "ЕГЭ"
+
     if email:
         user = get_user_by_email(email)
         if user:
-            topic_overrides = get_topic_progress(user["id"], subject_id)
-            stored_topics = get_user_plan_topics(user["id"], subject_id)
-    
+            user_id = user["id"]
+            topic_overrides = get_topic_progress(user_id, subject_id)
+            stored_topics = get_user_plan_topics(user_id, subject_id)
+            plan_meta = get_user_plan_meta(user_id, subject_id)
+            progress = get_user_progress(user_id, subject_id)
+            if progress:
+                current_score = progress.get("score", 0)
+            user_targets = get_user_targets(user_id)
+            if subject_id in user_targets:
+                target_score = user_targets[subject_id]
+            if examType:
+                exam_type = normalize_exam_type(examType)
+            elif user.get("exam_type"):
+                exam_type = normalize_exam_type(user["exam_type"])
+
     data = data_service.get_plan(
         subject_id,
         topic_overrides=topic_overrides,
         stored_topics=stored_topics,
+        plan_meta=plan_meta,
+        current_score=current_score,
+        target_score=target_score,
+        exam_type=exam_type,
     )
     
     if not data:
@@ -129,6 +153,11 @@ async def plan(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Plan not found"
         )
+
+    from services.exam_utils import is_oge
+
+    if is_oge(exam_type):
+        data["currentScore"] = max(2, min(5, int(data.get("currentScore", 0))))
     
     return data
 
@@ -194,10 +223,22 @@ async def update_plan_topic(
         progress=progress_value,
     )
     
+    user_id = user["id"]
+    plan_meta = get_user_plan_meta(user_id, subject_id)
+    progress_row = get_user_progress(user_id, subject_id)
+    current_score = progress_row.get("score", 0) if progress_row else None
+    user_targets = get_user_targets(user_id)
+    target_score = user_targets.get(subject_id)
+    exam_type = normalize_exam_type(user.get("exam_type") or "ЕГЭ")
+
     plan_data = data_service.get_plan(
         subject_id,
-        topic_overrides=get_topic_progress(user["id"], subject_id),
-        stored_topics=get_user_plan_topics(user["id"], subject_id),
+        topic_overrides=get_topic_progress(user_id, subject_id),
+        stored_topics=get_user_plan_topics(user_id, subject_id),
+        plan_meta=plan_meta,
+        current_score=current_score,
+        target_score=target_score,
+        exam_type=exam_type,
     )
     
     if not plan_data:

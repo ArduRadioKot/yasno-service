@@ -23,6 +23,7 @@ import {
 import { useApp } from '../context/AppContext';
 import type { AiTestAnalysis, AiTestAnswer, AiTestBreakdown, AiTestData, Task, TaskCheckResult } from '../types';
 import { HtmlRenderer } from './HtmlRenderer';
+import { LoadingProgress } from './LoadingProgress';
 
 export default function TaskScreen() {
   const { activeSubjectId, taskSessionKey, account, onNavigateToChat, setActiveSubject } = useApp();
@@ -308,13 +309,16 @@ export default function TaskScreen() {
   if (generatingTest) {
     return (
       <div className="h-full flex items-center justify-center bg-[#F3F4F6]">
-        <div className="bg-white rounded-2xl p-8 shadow-sm border border-border text-center max-w-sm">
-          <Loader2 className="size-12 animate-spin text-[#6D3DF5] mx-auto mb-4" />
-          <h3 className="font-semibold text-lg mb-2">Составляем тест из банка</h3>
-          <p className="text-sm text-muted-foreground">
-            Загружаем {testQuestionCount} задач и формируем варианты ответов
-          </p>
-        </div>
+        <LoadingProgress
+          title="Составляем тест из банка"
+          description={`Загружаем ${testQuestionCount} задач и формируем варианты ответов`}
+          stages={[
+            'Подбираем задания из банка заданий',
+            'Обрабатываем условия и формулы…',
+            'Генерируем варианты ответов…',
+            'Почти готово…',
+          ]}
+        />
       </div>
     );
   }
@@ -363,13 +367,16 @@ export default function TaskScreen() {
   if (analyzing) {
     return (
       <div className="h-full flex items-center justify-center bg-[#F3F4F6]">
-        <div className="bg-white rounded-2xl p-8 shadow-sm border border-border text-center max-w-sm">
-          <Loader2 className="size-12 animate-spin text-[#6D3DF5] mx-auto mb-4" />
-          <h3 className="font-semibold text-lg mb-2">Идёт загрузка</h3>
-          <p className="text-sm text-muted-foreground">
-            Подготовка аналитики: ИИ проверяет ответы и считает прогноз {isOgeExam ? 'оценки (2–5)' : 'баллов'}
-          </p>
-        </div>
+        <LoadingProgress
+          title="Составляем аналитику"
+          description={`ИИ проверяет ответы и считает прогноз ${isOgeExam ? 'оценки (2–5)' : 'баллов'}`}
+          stages={[
+            'Проверяем правильность ответов…',
+            'Выявляем слабые темы…',
+            'Считаем прогноз на экзамен…',
+            'Обновляем ваш план…',
+          ]}
+        />
       </div>
     );
   }

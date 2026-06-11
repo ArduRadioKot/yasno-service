@@ -7,6 +7,7 @@ import AuthScreen from './components/auth-screen';
 import ProfileScreen from './components/profile-screen';
 import BottomNav from './components/bottom-nav';
 import SidebarNav from './components/sidebar-nav';
+import { LoadingProgress } from './components/LoadingProgress';
 import { AppProvider, useApp } from './context/AppContext';
 import { api, setAiTestData } from './api/client';
 import type { UserAccount } from './types';
@@ -104,11 +105,15 @@ function AppShell({
       </div>
       {autoStarting && (
         <div className="fixed inset-0 z-50 bg-[#F3F4F6]/90 backdrop-blur-sm flex items-center justify-center p-6">
-          <div className="bg-white border border-[#DDDDE4] rounded-2xl p-6 w-full max-w-sm text-center shadow-sm">
-            <img src="/logo.png" alt="Ясно!" className="size-12 mx-auto mb-4 object-contain" />
-            <h3 className="font-semibold text-lg mb-2">Ясно! составляет тест</h3>
-            <p className="text-sm text-muted-foreground">Проверим стартовый уровень и соберем план подготовки.</p>
-          </div>
+          <LoadingProgress
+            title="Ясно! составляет тест"
+            description="Проверим стартовый уровень и соберём план подготовки."
+            stages={[
+              'Подбираем задания по выбранным предметам…',
+              'Загружаем условия из банка…',
+              'Готовим первичную диагностику…',
+            ]}
+          />
         </div>
       )}
     </div>

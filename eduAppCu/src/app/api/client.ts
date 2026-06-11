@@ -166,9 +166,9 @@ export const api = {
         : `/dashboard?subjectId=${subjectId}${examType ? `?examType=${encodeURIComponent(examType)}` : ''}`
     ),
 
-  getPlan: (subjectId: string, email?: string) =>
+  getPlan: (subjectId: string, email?: string, examType?: string) =>
     request<PlanData>(
-      `/plan?subjectId=${subjectId}${email ? `&email=${encodeURIComponent(email)}` : ''}`
+      `/plan?subjectId=${subjectId}${email ? `&email=${encodeURIComponent(email)}` : ''}${examType ? `&examType=${encodeURIComponent(examType)}` : ''}`
     ),
 
   updatePlanTopic: (

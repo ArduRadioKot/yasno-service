@@ -59,3 +59,14 @@ export function formatTargetLong(
   }
   return `цель ${score} баллов`;
 }
+
+export function formatExamScore(
+  value: number | undefined,
+  examType: UserAccount['examType']
+): string {
+  const score = Math.round(value ?? 0);
+  if (examType === 'ОГЭ') {
+    return `оценка ${Math.max(2, Math.min(5, score))}`;
+  }
+  return `${score} б.`;
+}

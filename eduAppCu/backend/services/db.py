@@ -118,6 +118,15 @@ def init_db():
             )
         """)
         
+        # Migrate user_settings: plan metadata per subject (forecast, weekly goals)
+        cursor.execute("""
+            DO $$ BEGIN
+                ALTER TABLE user_settings ADD COLUMN plan_meta TEXT DEFAULT '{}';
+            EXCEPTION
+                WHEN duplicate_column THEN NULL;
+            END $$;
+        """)
+
         # Create problem_bank table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS problem_bank (
@@ -581,6 +590,7 @@ def get_user_settings(user_id: int) -> Optional[Dict[str, Any]]:
     result["topic_progress"] = json.loads(result.get("topic_progress", "{}"))
     result["plan_topics"] = json.loads(result.get("plan_topics", "{}"))
     result["subject_task_progress"] = json.loads(result.get("subject_task_progress", "{}"))
+    result["plan_meta"] = json.loads(result.get("plan_meta", "{}"))
     
     return result
 
@@ -594,7 +604,7 @@ def update_user_settings(
         return get_user_settings(user_id)
     
     # Convert list/dict to JSON strings
-    for key in ["completed_task_ids", "topic_progress", "plan_topics", "subject_task_progress"]:
+    for key in ["completed_task_ids", "topic_progress", "plan_topics", "subject_task_progress", "plan_meta"]:
         if key in kwargs and isinstance(kwargs[key], (list, dict)):
             kwargs[key] = json.dumps(kwargs[key])
     
@@ -774,6 +784,25 @@ def get_subject_task_progress(user_id: int, subject_id: str) -> Optional[Dict[st
     return task_progress.get(subject_id)
 
 
+def get_user_plan_meta(user_id: int, subject_id: str) -> Dict[str, Any]:
+    """Get persisted plan metadata (forecast, weekly goals) for a subject."""
+    settings = get_user_settings(user_id)
+    if not settings:
+        return {}
+    plan_meta = settings.get("plan_meta", {})
+    return plan_meta.get(subject_id, {})
+
+
+def save_user_plan_meta(user_id: int, subject_id: str, meta: Dict[str, Any]) -> None:
+    """Persist plan metadata for a subject."""
+    settings = get_user_settings(user_id) or {}
+    plan_meta = settings.get("plan_meta", {})
+    existing = plan_meta.get(subject_id, {})
+    existing.update(meta)
+    plan_meta[subject_id] = existing
+    update_user_settings(user_id, plan_meta=plan_meta)
+
+
 def merge_plan_topics_from_gaps(user_id: int, subject_id: str, gaps: list[str]) -> list[dict]:
     """Merge AI-detected gaps into the user's plan topics."""
     settings = get_user_settings(user_id) or {}
@@ -823,11 +852,17 @@ def record_test_task_progress(
         task_progress[subject_id] = {
             "correct": 0,
             "total": 0,
-            "accuracy": 0
+            "accuracy": 0,
+            "goal": 5,
         }
     
     task_progress[subject_id]["correct"] += correct_count
     task_progress[subject_id]["total"] += total_count
+    task_progress[subject_id]["goal"] = max(
+        int(task_progress[subject_id].get("goal", 0)),
+        plan_topic_count,
+        5,
+    )
     
     if task_progress[subject_id]["total"] > 0:
         accuracy = (task_progress[subject_id]["correct"] / task_progress[subject_id]["total"]) * 100

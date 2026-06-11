@@ -2,7 +2,10 @@ import json
 from typing import Any
 
 from services.ai_client import chat_json, is_ai_available
-from services.content_utils import plain_text_from_content, rich_content_to_html
+from services.content_utils import (
+    plain_text_from_content,
+    rich_content_to_html,
+)
 from services.data_service import data_service
 from services.exam_utils import (
     ai_exam_prompt,
@@ -11,7 +14,7 @@ from services.exam_utils import (
     percent_to_oge_grade,
     predict_exam_result,
 )
-from services.problem_bank_service import get_problems_for_test
+from services.problem_bank_service import get_problems_for_test, infer_sdamgia_base_url
 
 
 def _answer_field(answer: Any, key: str, default: Any = None) -> Any:
@@ -41,12 +44,22 @@ def _serialize_answers(answers: list) -> list[dict]:
     return serialized
 
 
-def _fallback_mcq(problem: dict) -> dict:
-    condition_html = rich_content_to_html(problem.get("condition") or "")
-    solution_html = rich_content_to_html(problem.get("solution") or "")
+def _problem_base_url(problem: dict, exam_type: str = "ЕГЭ") -> str:
+    return infer_sdamgia_base_url(
+        str(problem.get("subject_id") or ""),
+        str(problem.get("external_id") or ""),
+        exam_type=exam_type,
+        url=str(problem.get("url") or ""),
+    )
+
+
+def _fallback_mcq(problem: dict, exam_type: str = "ЕГЭ") -> dict:
+    base_url = _problem_base_url(problem, exam_type)
+    condition_html = rich_content_to_html(problem.get("condition") or "", base_url=base_url)
+    solution_html = rich_content_to_html(problem.get("solution") or "", base_url=base_url)
     question_plain = plain_text_from_content(problem.get("condition") or "") or "Вопрос"
     answer = plain_text_from_content(problem.get("answer")) or problem.get("answer") or "Правильный ответ"
-    answer_html = rich_content_to_html(problem.get("answer") or answer)
+    answer_html = rich_content_to_html(problem.get("answer") or answer, base_url=base_url)
     distractors = [
         ("Ответ не соответствует условию", "Ответ не соответствует условию"),
         ("Нужно другое правило или формула", "Нужно другое правило или формула"),
@@ -69,9 +82,11 @@ def _build_single_mcq_with_ai(
     problem: dict, subject_name: str, exam_type: str = "ЕГЭ"
 ) -> dict:
     if not is_ai_available():
-        return _fallback_mcq(problem)
+        return _fallback_mcq(problem, exam_type=exam_type)
 
     exam_label = "ОГЭ" if is_oge(exam_type) else "ЕГЭ"
+    base_url = _problem_base_url(problem, exam_type)
+    condition_html = rich_content_to_html(problem.get("condition") or "", base_url=base_url)
     try:
         data = chat_json(
             [
@@ -116,23 +131,27 @@ def _build_single_mcq_with_ai(
             and isinstance(correct_index, int)
             and 0 <= correct_index < len(answers)
         ):
-            question_html = rich_content_to_html(data["question"])
             solution_raw = data.get("solution") or problem.get("solution") or ""
-            solution_html = rich_content_to_html(solution_raw)
+            solution_html = rich_content_to_html(solution_raw, base_url=base_url)
+            ai_question_html = rich_content_to_html(data["question"], base_url=base_url)
             return {
                 "problemId": data.get("problemId") or problem.get("external_id"),
                 "topic": data.get("topic") or problem.get("topic"),
-                "question": plain_text_from_content(data["question"]) or str(data["question"]),
-                "questionHtml": question_html or rich_content_to_html(problem.get("condition") or ""),
+                "question": plain_text_from_content(data["question"]) or plain_text_from_content(
+                    problem.get("condition") or ""
+                ),
+                "questionHtml": condition_html or ai_question_html,
                 "answers": [str(a) for a in answers[:4]],
-                "answersHtml": [rich_content_to_html(a) or str(a) for a in answers[:4]],
+                "answersHtml": [
+                    rich_content_to_html(a, base_url=base_url) or str(a) for a in answers[:4]
+                ],
                 "correctIndex": correct_index,
                 "solution": plain_text_from_content(solution_raw) or str(solution_raw),
                 "solutionHtml": solution_html,
             }
     except Exception:
         pass
-    return _fallback_mcq(problem)
+    return _fallback_mcq(problem, exam_type=exam_type)
 
 
 def _build_mcq_with_ai(

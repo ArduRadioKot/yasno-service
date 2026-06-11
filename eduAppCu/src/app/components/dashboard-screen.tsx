@@ -26,6 +26,7 @@ import { useApp } from '../context/AppContext';
 import { clampTargetForExam, formatTargetShort } from '../utils/exam';
 import type { DashboardData, PlanTopicBrief } from '../types';
 import SubjectSelector from './subject-selector';
+import { LoadingProgress } from './LoadingProgress';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -535,19 +536,24 @@ export default function DashboardScreen() {
 
       {generatingTest && (
         <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-6">
-          <div className="bg-white rounded-2xl border border-border shadow-sm p-6 w-full max-w-sm text-center">
-            <Loader2 className="size-8 animate-spin text-[#6D3DF5] mx-auto mb-4" />
-            <h3 className="font-semibold text-lg mb-2">
-              {generatingTopicName
+          <LoadingProgress
+            title={
+              generatingTopicName
                 ? `Составляем тест по теме «${generatingTopicName}»`
-                : 'Ясно! составляет диагностику'}
-            </h3>
-            <p className="text-sm text-muted-foreground">
-              {generatingTopicName
+                : 'Ясно! составляет диагностику'
+            }
+            description={
+              generatingTopicName
                 ? 'Загружаем задания по выбранной теме и готовим вопросы.'
-                : 'Вопросы подберутся по предмету, а после теста слабые темы появятся в плане.'}
-            </p>
-          </div>
+                : 'Вопросы подберутся по предмету, а после теста слабые темы появятся в плане.'
+            }
+            stages={[
+              'Загружаем задания из банка…',
+              'Обрабатываем условия задач…',
+              'Формируем варианты ответов…',
+              'Почти готово…',
+            ]}
+          />
         </div>
       )}
     </div>
