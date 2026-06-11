@@ -6,13 +6,13 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite",
-    "backend": "cd backend && (test -d .venv || python3 -m venv .venv) && .venv/bin/python -m pip install -q -r requirements.txt && .venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 5001 --reload",
+    "backend": "cd backend && .venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 5001 --reload",
     "backend:setup": "cd backend && python3 -m venv .venv && .venv/bin/python -m pip install -r requirements.txt",
+    "bot": "cd bot && PYTHONPATH=../backend .venv/bin/python bot.py",
+    "bot:setup": "cd bot && python3 -m venv .venv && .venv/bin/python -m pip install -r requirements.txt",
+    "start": "echo 'Run in two terminals: npm run backend && npm run dev'",
     "db:up": "docker compose up -d postgres",
     "db:down": "docker compose down",
-    "bot": "cd bot && python3 -m pip install -q -r requirements.txt && PYTHONPATH=../backend python3 bot.py",
-    "bot:setup": "cd bot && python3 -m pip install -r requirements.txt",
-    "start": "echo 'Run in two terminals: npm run backend && npm run dev'",
     "fix:perms": "node -e \"const fs=require('fs');const p='node_modules/.perm-test';try{fs.mkdirSync(p);fs.rmdirSync(p);console.log('OK: node_modules is writable');}catch{console.error('\\n⚠ node_modules belongs to root. Run:\\n  sudo chown -R \\\"$(whoami)\\\" node_modules package-lock.json\\n  npm install\\n');process.exit(1)}\""
   },
   "dependencies": {
