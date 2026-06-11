@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from 'react';
 import { api } from '../api/client';
-import type { Subject, UserAccount } from '../types';
+import type { Subject, UserAccount, PremiumStatus } from '../types';
 
 const STORAGE_KEY = 'edu-active-subject';
 
@@ -27,6 +27,8 @@ type AppContextValue = {
   taskSessionKey: number;
   account: UserAccount;
   updateAccount: (account: UserAccount) => void;
+  premium: PremiumStatus | null;
+  refreshPremium: () => Promise<void>;
   logout: () => void;
 };
 
@@ -57,6 +59,20 @@ export function AppProvider({
   const [error, setError] = useState<string | null>(null);
   const [taskSessionKey, setTaskSessionKey] = useState(0);
   const [pendingChatPrompt, setPendingChatPrompt] = useState<string | null>(null);
+  const [premium, setPremium] = useState<PremiumStatus | null>(null);
+
+  const refreshPremium = useCallback(async () => {
+    try {
+      const status = await api.getPremiumStatus(account.email);
+      setPremium(status);
+    } catch {
+      setPremium({
+        isPremium: false,
+        daysLeft: 0,
+        message: 'Не удалось проверить статус подписки',
+      });
+    }
+  }, [account.email]);
 
   const refreshSubjects = useCallback(async () => {
     try {
@@ -84,7 +100,8 @@ export function AppProvider({
 
   useEffect(() => {
     refreshSubjects();
-  }, [refreshSubjects]);
+    refreshPremium();
+  }, [refreshSubjects, refreshPremium]);
 
   const setActiveSubject = useCallback(async (id: string) => {
     try {
@@ -140,6 +157,8 @@ export function AppProvider({
         taskSessionKey,
         account,
         updateAccount: onAccountChange,
+        premium,
+        refreshPremium,
         logout: onLogout,
       }}
     >

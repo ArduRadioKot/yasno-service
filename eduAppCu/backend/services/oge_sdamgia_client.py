@@ -99,7 +99,18 @@ class OgeSdamGIA:
                 ids.append(parts[-1].rstrip(".)"))
         return ids
 
+    def _extract_html(self, element) -> str:
+        """Extract HTML content while preserving images and formatting."""
+        if element is None:
+            return ""
+        # Convert element to string to preserve HTML structure
+        html = str(element)
+        # Clean up excessive whitespace but preserve structure
+        html = re.sub(r"\s+", " ", html)
+        return html.strip()
+
     def _extract_text(self, element) -> str:
+        """Extract plain text (fallback)."""
         if element is None:
             return ""
         return re.sub(r"\s+", " ", element.get_text(" ", strip=True)).strip()
@@ -114,8 +125,8 @@ class OgeSdamGIA:
             return None
 
         bodies = prob_block.find_all("div", {"class": "pbody"})
-        condition = self._extract_text(bodies[0]) if bodies else ""
-        solution = self._extract_text(bodies[1]) if len(bodies) > 1 else ""
+        condition = self._extract_html(bodies[0]) if bodies else ""
+        solution = self._extract_html(bodies[1]) if len(bodies) > 1 else ""
 
         answer_el = prob_block.find("div", {"class": "answer"})
         answer = self._extract_text(answer_el)
@@ -133,7 +144,9 @@ class OgeSdamGIA:
             "id": str(problem_id),
             "topic": topic,
             "condition": condition,
+            "conditionHtml": condition,  # HTML version with images
             "solution": solution,
+            "solutionHtml": solution,  # HTML version with images
             "answer": answer,
             "url": f"{base}/problem?id={problem_id}",
         }

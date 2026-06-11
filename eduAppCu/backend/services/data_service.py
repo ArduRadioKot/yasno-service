@@ -70,8 +70,10 @@ class DataService:
             "topic": task["topic"],
             "difficulty": task["difficulty"],
             "question": task["question"],
+            "questionHtml": task.get("questionHtml") or task["question"],
             "given": task.get("given", []),
-            "answers": [{"id": a["id"], "text": a["text"]} for a in task["answers"]],
+            "givenHtml": task.get("givenHtml") or task.get("given", []),
+            "answers": [{"id": a["id"], "text": a["text"], "html": a.get("html")} for a in task["answers"]],
             "index": index,
             "total": total,
         }
@@ -422,6 +424,7 @@ class DataService:
         stored_topics: list[dict] | None = None,
         completed_task_ids: list[str] | None = None,
         subject_task_stats: dict | None = None,
+        exam_type: str = "ЕГЭ",
     ):
         subject = self.get_subject(subject_id)
         if not subject:
@@ -454,9 +457,13 @@ class DataService:
         )
         pending_topics = len([t for t in all_topics if t.get("status") != "completed"])
         top_weak = weak[0]["topic"] if weak else None
+        is_oge = exam_type == "ОГЭ"
         return {
             "userName": self.user["userName"],
             "subject": subject,
+            "examType": exam_type,
+            "scoreLabel": "оценка" if is_oge else "баллов",
+            "forecastTitle": "Прогноз ОГЭ" if is_oge else "Прогноз ЕГЭ",
             "score": progress.get("score", 0),
             "scoreDelta": progress.get("scoreDelta", 0),
             "chart": [

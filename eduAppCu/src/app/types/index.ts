@@ -19,6 +19,13 @@ export type UserAccount = {
   marketing: boolean;
 };
 
+export type PremiumStatus = {
+  isPremium: boolean;
+  expiresAt?: string | null;
+  daysLeft: number;
+  message: string;
+};
+
 export type TaskAnswer = {
   id: number;
   text: string;
@@ -49,11 +56,14 @@ export type TaskCheckResult = {
 export type AiTestQuestion = {
   topic: string;
   question: string;
+  questionHtml?: string;
   answers: string[];
+  answersHtml?: string[];
   correctIndex: number;
   problemId?: string;
   subjectId?: string;
   solution?: string;
+  solutionHtml?: string;
 };
 
 export type AiTestData = {
@@ -69,8 +79,11 @@ export type AiTestData = {
 export type AiTestAnswer = {
   topic: string;
   question: string;
+  questionHtml?: string;
   selectedAnswer: string;
+  selectedAnswerHtml?: string;
   correctAnswer: string;
+  correctAnswerHtml?: string;
   correct: boolean;
   subjectId?: string;
   problemId?: string;

@@ -31,3 +31,5 @@ api.txt
 /eduAppCu/backend/data
 edu_app.db
 /eduAppCu/bot/keys.txt
+
+__pycache__

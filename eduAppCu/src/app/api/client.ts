@@ -7,6 +7,7 @@ import type {
   Subject,
   Task,
   TaskCheckResult,
+  PremiumStatus,
 } from '../types';
 
 const AI_TEST_KEY = 'edu-ai-test-data';
@@ -85,10 +86,34 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    const raw = (err as { error?: string }).error || `HTTP ${res.status}`;
+    const body = err as {
+      error?: string;
+      detail?: string | { msg?: string }[];
+    };
+    const detail =
+      typeof body.detail === 'string'
+        ? body.detail
+        : Array.isArray(body.detail)
+          ? body.detail.map((item) => item.msg).filter(Boolean).join(', ')
+          : '';
+    const raw = body.error || detail || `HTTP ${res.status}`;
     throw new Error(sanitizeUserMessage(raw));
   }
   return res.json() as Promise<T>;
+}
+
+function mapPremiumStatus(data: {
+  is_premium: boolean;
+  expires_at?: string | null;
+  days_left?: number;
+  message?: string;
+}): PremiumStatus {
+  return {
+    isPremium: data.is_premium,
+    expiresAt: data.expires_at ?? null,
+    daysLeft: data.days_left ?? 0,
+    message: data.message ?? '',
+  };
 }
 
 export const api = {
@@ -193,11 +218,46 @@ export const api = {
       `/chat/suggestions?subjectId=${subjectId}`
     ),
 
-  chat: (message: string, subjectId?: string, taskContext?: string) =>
+  chat: (message: string, subjectId?: string, taskContext?: string, email?: string) =>
     request<{ role: string; content: string }>('/chat', {
       method: 'POST',
-      body: JSON.stringify({ message, subjectId, taskContext }),
+      body: JSON.stringify({ message, subjectId, taskContext, email }),
     }),
+
+  validatePremiumKey: (key: string) =>
+    request<{ valid: boolean; message: string }>('/premium/validate', {
+      method: 'POST',
+      body: JSON.stringify({ key }),
+    }),
+
+  activatePremiumKey: (key: string, email: string) =>
+    request<{ valid: boolean; message: string; expires_at?: string }>('/premium/activate', {
+      method: 'POST',
+      body: JSON.stringify({ key, email }),
+    }),
+
+  getPremiumStatus: async (email: string): Promise<PremiumStatus> => {
+    const data = await request<{
+      is_premium: boolean;
+      expires_at?: string | null;
+      days_left?: number;
+      message?: string;
+    }>(`/premium/status?email=${encodeURIComponent(email)}`);
+    return mapPremiumStatus(data);
+  },
+
+  checkPremium: async (email: string): Promise<PremiumStatus> => {
+    const data = await request<{
+      is_premium: boolean;
+      expires_at?: string | null;
+      days_left?: number;
+      message?: string;
+    }>('/premium/check', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+    return mapPremiumStatus(data);
+  },
 
   generateTest: (
     subjectId: string,

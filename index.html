@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ясно! — ИИ-подготовка к ОГЭ и ЕГЭ</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --bg-color: #f9f9fc;
+            --text-color: #1a1a1a;
+            --text-muted: #666666;
+            --primary: #6344eb;
+            --primary-light: #f0ecff;
+            --card-bg: #ffffff;
+            --border-radius: 16px;
+            --transition: all 0.3s ease;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 24px;
+        }
+
+        /* Header */
+        header {
+            padding: 24px 0;
+            position: fixed;
+            width: 100%;
+            top: 0;
+            background: rgba(249, 249, 252, 0.8);
+            backdrop-filter: blur(12px);
+            z-index: 1000;
+            border-bottom: 1px solid rgba(0,0,0,0.03);
+        }
+
+        .nav-wrapper {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-weight: 700;
+            font-size: 22px;
+            color: var(--text-color);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .logo span {
+            color: var(--primary);
+        }
+
+        .btn {
+            display: inline-block;
+            background: var(--primary);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 12px;
+            font-weight: 600;
+            text-decoration: none;
+            transition: var(--transition);
+            border: none;
+            cursor: pointer;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(99, 68, 235, 0.2);
+        }
+
+        .btn-light {
+            background: var(--primary-light);
+            color: var(--primary);
+        }
+
+        /* Hero Section */
+        .hero {
+            padding: 160px 0 80px 0;
+            text-align: center;
+        }
+
+        .badge {
+            background: var(--primary-light);
+            color: var(--primary);
+            padding: 6px 16px;
+            border-radius: 100px;
+            font-size: 14px;
+            font-weight: 600;
+            display: inline-block;
+            margin-bottom: 24px;
+        }
+
+        h1 {
+            font-size: 56px;
+            font-weight: 700;
+            line-height: 1.15;
+            letter-spacing: -1px;
+            margin-bottom: 24px;
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        h1 span {
+            color: var(--primary);
+        }
+
+        .hero p {
+            font-size: 20px;
+            color: var(--text-muted);
+            max-width: 600px;
+            margin: 0 auto 40px auto;
+        }
+
+        /* App Preview Mockup */
+        .preview-mockup {
+            background: var(--card-bg);
+            border: 1px solid rgba(0,0,0,0.05);
+            border-radius: var(--border-radius);
+            box-shadow: 0 40px 80px rgba(0,0,0,0.06);
+            padding: 20px;
+            margin-top: 40px;
+            position: relative;
+            transform: translateY(0);
+            transition: var(--transition);
+        }
+
+        .preview-mockup:hover {
+            transform: translateY(-5px);
+        }
+
+        .mockup-header {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 16px;
+        }
+        .circle {
+            width: 10px;
+            height: 10px;
+            background: #ddd;
+            border-radius: 50%;
+        }
+
+        .mockup-body {
+            background: #fcfbfe;
+            height: 400px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+            font-weight: 500;
+            border: 1px dashed #e1dbf7;
+        }
+
+        /* Features Section */
+        .features {
+            padding: 100px 0;
+        }
+
+        .section-title {
+            text-align: center;
+            font-size: 36px;
+            font-weight: 700;
+            margin-bottom: 60px;
+            letter-spacing: -0.5px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 32px;
+        }
+
+        .card {
+            background: var(--card-bg);
+            padding: 40px;
+            border-radius: var(--border-radius);
+            border: 1px solid rgba(0,0,0,0.03);
+            transition: var(--transition);
+        }
+
+        .card:hover {
+            border-color: rgba(99, 68, 235, 0.2);
+            transform: translateY(-4px);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.02);
+        }
+
+        .card-icon {
+            width: 48px;
+            height: 48px;
+            background: var(--primary-light);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            margin-bottom: 24px;
+            color: var(--primary);
+        }
+
+        .card h3 {
+            font-size: 22px;
+            margin-bottom: 12px;
+            font-weight: 600;
+        }
+
+        .card p {
+            color: var(--text-muted);
+            font-size: 16px;
+        }
+
+        /* CTA Section */
+        .cta {
+            padding: 100px 0;
+            background: #110d26;
+            color: white;
+            border-radius: 32px;
+            margin-bottom: 80px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .cta h2 {
+            font-size: 42px;
+            font-weight: 700;
+            margin-bottom: 16px;
+        }
+
+        .cta p {
+            color: #b3a9e9;
+            font-size: 18px;
+            max-width: 500px;
+            margin: 0 auto 40px auto;
+        }
+
+        .cta .btn {
+            background: white;
+            color: var(--primary);
+            padding: 16px 36px;
+            font-size: 18px;
+        }
+
+        .cta .btn:hover {
+            background: var(--primary-light);
+            box-shadow: 0 8px 30px rgba(255, 255, 255, 0.1);
+        }
+
+        /* Footer */
+        footer {
+            padding: 40px 0;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 14px;
+            border-top: 1px solid rgba(0,0,0,0.03);
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            h1 { font-size: 38px; }
+            .cta h2 { font-size: 30px; }
+            .grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="container nav-wrapper">
+            <div class="logo">✨ Ясно!<span>.</span></div>
+            <a href="#" class="btn btn-light" id="nav-cta">Войти в кабинет</a>
+        </div>
+    </header>
+
+    <section class="hero">
+        <div class="container">
+            <div class="badge">AI-подготовка нового поколения</div>
+            <h1>Готовься к экзаменам эффективно с <span>ИИ-ментором</span></h1>
+            <p>Умная адаптивная платформа для подготовки к ОГЭ и ЕГЭ. Хватит переплачивать репетиторам — учись в своем темпе.</p>
+            <a href="#" class="btn" id="hero-cta">Начать бесплатно</a>
+            
+            <div class="preview-mockup">
+                <div class="mockup-header">
+                    <div class="circle" style="background: #ff5f56;"></div>
+                    <div class="circle" style="background: #ffbd2e;"></div>
+                    <div class="circle" style="background: #27c93f;"></div>
+                </div>
+                <div class="mockup-body" id="interactive-preview">
+                    [ Интерактивный дашборд ученика: Прогноз баллов | AI-Чат | План ]
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="features">
+        <div class="container">
+            <h2 class="section-title">Все, что нужно для сотки, в одном месте</h2>
+            <div class="grid">
+                
+                <div class="card">
+                    <div class="card-icon">🧠</div>
+                    <h3>Персональный трек</h3>
+                    <p>Алгоритм определяет твои слабые темы и перестраивает план обучения на лету. Учи только то, что западает.</p>
+                </div>
+
+                <div class="card">
+                    <div class="card-icon">💬</div>
+                    <h3>ИИ-Ментор 24/7</h3>
+                    <p>Задавай вопросы в чат, проси «объяснить проще» или мгновенно разбирай сложные формулы и законы.</p>
+                </div>
+
+                <div class="card">
+                    <div class="card-icon">📸</div>
+                    <h3>Разбор по фото</h3>
+                    <p>Застрял на задаче из сборника? Просто сфотографируй её. ИИ выдаст пошаговое решение и объяснит логику.</p>
+                </div>
+
+                <div class="card">
+                    <div class="card-icon">📊</div>
+                    <h3>Прогноз баллов</h3>
+                    <p>Динамический график прогноза реального результата на ОГЭ/ЕГЭ на основе твоих текущих успехов.</p>
+                </div>
+
+                <div class="card">
+                    <div class="card-icon">📝</div>
+                    <h3>Честные КИМы</h3>
+                    <p>Полноценные симуляторы экзаменов. ИИ проверяет даже сложную развернутую часть строго по критериям ФИПИ.</p>
+                </div>
+
+                <div class="card">
+                    <div class="card-icon">🏆</div>
+                    <h3>Умные достижения</h3>
+                    <p>Встроенная система мотивации и флеш-карточки помогут закрепить материал без нудной зубрежки.</p>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <section class="container">
+        <div class="cta">
+            <h2>Сделай свой результат ясным</h2>
+            <p>Присоединяйся к умной подготовке и подними прогноз баллов уже через неделю.</p>
+            <button class="btn" id="action-btn">Запустить приложение</button>
+        </div>
+    </section>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2026 Ясно! Экосистема AI-подготовки к экзаменам. Все права защищены.</p>
+        </div>
+    </footer>
+
+    <script>
+        // Легкий JS интерактив для демонстрации работы кнопок
+        const buttons = ['nav-cta', 'hero-cta', 'action-btn'];
+        
+        buttons.forEach(id => {
+            const btn = document.getElementById(id);
+            if (btn) {
+                btn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    alert('Перенаправление на страницу авторизации / активации премиум-ключа...');
+                });
+            }
+        });
+
+        // Эффект смены текста в мокапе для большей динамики
+        const preview = document.getElementById('interactive-preview');
+        const phrases = [
+            "📈 Прогноз ЕГЭ: Биология — 89 баллов (+11 за неделю)",
+            "💬 ИИ-Чат: «Объясни тему 'Клетка' простыми словами...»",
+            "📸 Сканирование задания по фото... Определение критериев ФИПИ",
+            "🏆 Получено достижение: 'Аннигилятор багов!'"
+        ];
+        let index = 0;
+        
+        setInterval(() => {
+            preview.style.opacity = 0;
+            setTimeout(() => {
+                preview.textContent = phrases[index];
+                preview.style.opacity = 1;
+                index = (index + 1) % phrases.length;
+            }, 300);
+        }, 3000);
+        
+        // Стили для плавной анимации текста в мокапе
+        preview.style.transition = "opacity 0.3s ease";
+        preview.textContent = phrases[0];
+    </script>
+</body>
+</html>

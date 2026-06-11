@@ -22,6 +22,7 @@ import {
 } from '../api/client';
 import { useApp } from '../context/AppContext';
 import type { AiTestAnalysis, AiTestAnswer, AiTestBreakdown, AiTestData, Task, TaskCheckResult } from '../types';
+import { HtmlRenderer } from './HtmlRenderer';
 
 export default function TaskScreen() {
   const { activeSubjectId, taskSessionKey, account, onNavigateToChat, setActiveSubject } = useApp();
@@ -207,8 +208,11 @@ export default function TaskScreen() {
       {
         topic: currentQuestion.topic || aiTest.topic,
         question: currentQuestion.question,
+        questionHtml: currentQuestion.questionHtml,
         selectedAnswer: currentQuestion.answers[answerIndex],
+        selectedAnswerHtml: currentQuestion.answersHtml?.[answerIndex],
         correctAnswer: currentQuestion.answers[currentQuestion.correctIndex],
+        correctAnswerHtml: currentQuestion.answersHtml?.[currentQuestion.correctIndex],
         correct: isCorrect,
         subjectId: currentQuestion.subjectId || aiTest.subjectId || activeSubjectId,
         problemId: currentQuestion.problemId,
@@ -483,19 +487,35 @@ export default function TaskScreen() {
                           <span className="font-semibold text-sm">Вопрос {index + 1}</span>
                           <span className="text-xs text-muted-foreground">· {answer.topic}</span>
                         </div>
-                        <p className="text-sm mb-3">{answer.question}</p>
+                        <p className="text-sm mb-3">
+                          {answer.questionHtml ? (
+                            <HtmlRenderer html={answer.questionHtml} />
+                          ) : (
+                            answer.question
+                          )}
+                        </p>
                         <div className="space-y-2">
                           <div className="flex items-start gap-2 text-sm">
                             <span className="text-muted-foreground shrink-0">Ваш ответ:</span>
                             <span className={answer.correct ? 'text-[#6D3DF5] font-medium' : 'text-destructive font-medium'}>
-                              {answer.selectedAnswer}
+                              {answer.selectedAnswerHtml ? (
+                                <HtmlRenderer html={answer.selectedAnswerHtml} />
+                              ) : (
+                                answer.selectedAnswer
+                              )}
                             </span>
                           </div>
                           {!answer.correct && (
                             <>
                               <div className="flex items-start gap-2 text-sm">
                                 <span className="text-muted-foreground shrink-0">Правильный ответ:</span>
-                                <span className="text-[#6D3DF5] font-medium">{answer.correctAnswer}</span>
+                                <span className="text-[#6D3DF5] font-medium">
+                                  {answer.correctAnswerHtml ? (
+                                    <HtmlRenderer html={answer.correctAnswerHtml} />
+                                  ) : (
+                                    answer.correctAnswer
+                                  )}
+                                </span>
                               </div>
                               {breakdown?.explanation && (
                                 <p className="text-sm text-muted-foreground leading-relaxed">
@@ -589,7 +609,13 @@ export default function TaskScreen() {
               <div className="bg-[#6D3DF5] rounded-xl size-10 flex items-center justify-center text-white font-bold shrink-0">
                 {currentQuestionIndex + 1}
               </div>
-              <h3 className="font-semibold text-lg">{currentQuestion.question}</h3>
+              <h3 className="font-semibold text-lg flex-1">
+                {currentQuestion.questionHtml ? (
+                  <HtmlRenderer html={currentQuestion.questionHtml} />
+                ) : (
+                  currentQuestion.question
+                )}
+              </h3>
             </div>
           </div>
 
@@ -603,7 +629,13 @@ export default function TaskScreen() {
                   disabled={analyzing}
                   className="w-full text-left p-4 rounded-xl border-2 border-border bg-white hover:border-[#6D3DF5] hover:bg-[#6D3DF5]/5 transition-colors disabled:opacity-50"
                 >
-                  <span className="font-medium">{answer}</span>
+                  <span className="font-medium">
+                    {currentQuestion.answersHtml && currentQuestion.answersHtml[index] ? (
+                      <HtmlRenderer html={currentQuestion.answersHtml[index]} />
+                    ) : (
+                      answer
+                    )}
+                  </span>
                 </button>
               ))}
             </div>
@@ -712,15 +744,27 @@ export default function TaskScreen() {
               <div className="bg-[#6D3DF5] rounded-xl size-10 flex items-center justify-center text-white font-bold shrink-0">
                 {task.index}
               </div>
-              <div>
-                <h3 className="font-semibold text-lg mb-3">{task.question}</h3>
+              <div className="flex-1">
+                <h3 className="font-semibold text-lg mb-3">
+                  {task.questionHtml ? (
+                    <HtmlRenderer html={task.questionHtml} />
+                  ) : (
+                    task.question
+                  )}
+                </h3>
                 {task.given.length > 0 && (
                   <div className="bg-muted/50 rounded-2xl p-4 mt-4">
                     <p className="text-sm text-muted-foreground mb-2">Дано:</p>
                     <div className="space-y-1 font-mono text-sm">
-                      {task.given.map((line, i) => (
-                        <p key={i}>{line}</p>
-                      ))}
+                      {task.givenHtml && task.givenHtml.length > 0 ? (
+                        task.givenHtml.map((line, i) => (
+                          <HtmlRenderer key={i} html={line} />
+                        ))
+                      ) : (
+                        task.given.map((line, i) => (
+                          <p key={i}>{line}</p>
+                        ))
+                      )}
                     </div>
                   </div>
                 )}
@@ -755,7 +799,13 @@ export default function TaskScreen() {
                       } ${showExplanation ? 'pointer-events-none' : ''}`}
                     >
                       <div className="flex items-center justify-between">
-                        <span className="font-medium">{answer.text}</span>
+                        <span className="font-medium">
+                          {answer.html ? (
+                            <HtmlRenderer html={answer.html} />
+                          ) : (
+                            answer.text
+                          )}
+                        </span>
                         {isCorrect && <Check className="size-6 text-[#6D3DF5]" />}
                         {isWrong && <XIcon className="size-6 text-destructive" />}
                       </div>
@@ -787,7 +837,11 @@ export default function TaskScreen() {
                       <h4 className="font-semibold text-lg">Почему это ошибка?</h4>
                     </div>
                     <p className="text-foreground/80 leading-relaxed">
-                      {checkResult.explanation.wrongHint}
+                      {checkResult.explanation.wrongHintHtml ? (
+                        <HtmlRenderer html={checkResult.explanation.wrongHintHtml} />
+                      ) : (
+                        checkResult.explanation.wrongHint
+                      )}
                     </p>
                   </div>
                 )}
@@ -802,13 +856,21 @@ export default function TaskScreen() {
                   <div className="space-y-4">
                     {checkResult.explanation.steps.map((step, i) => (
                       <div key={i} className="bg-white/60 backdrop-blur-sm rounded-xl p-4 font-mono text-center text-sm">
-                        {step}
+                        {checkResult.explanation.stepsHtml && checkResult.explanation.stepsHtml[i] ? (
+                          <HtmlRenderer html={checkResult.explanation.stepsHtml[i]} />
+                        ) : (
+                          step
+                        )}
                       </div>
                     ))}
                     <div className="bg-[#6D3DF5]/10 rounded-xl p-4 flex items-start gap-2">
                       <Lightbulb className="size-4 text-[#6D3DF5] shrink-0 mt-0.5" />
                       <p className="text-sm font-medium text-[#6D3DF5]">
-                        {checkResult.explanation.tip}
+                        {checkResult.explanation.tipHtml ? (
+                          <HtmlRenderer html={checkResult.explanation.tipHtml} />
+                        ) : (
+                          checkResult.explanation.tip
+                        )}
                       </p>
                     </div>
                   </div>

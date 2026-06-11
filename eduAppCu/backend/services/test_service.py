@@ -2,6 +2,7 @@ import json
 from typing import Any
 
 from services.ai_client import chat_json, is_ai_available
+from services.content_utils import plain_text_from_content, rich_content_to_html
 from services.data_service import data_service
 from services.exam_utils import (
     ai_exam_prompt,
@@ -13,20 +14,54 @@ from services.exam_utils import (
 from services.problem_bank_service import get_problems_for_test
 
 
+def _answer_field(answer: Any, key: str, default: Any = None) -> Any:
+    if isinstance(answer, dict):
+        return answer.get(key, default)
+    return getattr(answer, key, default)
+
+
+def _serialize_answers(answers: list) -> list[dict]:
+    serialized: list[dict] = []
+    for answer in answers:
+        if hasattr(answer, "model_dump"):
+            serialized.append(answer.model_dump())
+        elif isinstance(answer, dict):
+            serialized.append(answer)
+        else:
+            serialized.append(
+                {
+                    "correct": bool(_answer_field(answer, "correct", False)),
+                    "topic": _answer_field(answer, "topic", ""),
+                    "question": _answer_field(answer, "question", ""),
+                    "selectedAnswer": _answer_field(answer, "selectedAnswer", ""),
+                    "correctAnswer": _answer_field(answer, "correctAnswer", ""),
+                    "subjectId": _answer_field(answer, "subjectId", ""),
+                }
+            )
+    return serialized
+
+
 def _fallback_mcq(problem: dict) -> dict:
-    answer = problem.get("answer") or "Правильный ответ"
+    condition_html = rich_content_to_html(problem.get("condition") or "")
+    solution_html = rich_content_to_html(problem.get("solution") or "")
+    question_plain = plain_text_from_content(problem.get("condition") or "") or "Вопрос"
+    answer = plain_text_from_content(problem.get("answer")) or problem.get("answer") or "Правильный ответ"
+    answer_html = rich_content_to_html(problem.get("answer") or answer)
+    distractors = [
+        ("Ответ не соответствует условию", "Ответ не соответствует условию"),
+        ("Нужно другое правило или формула", "Нужно другое правило или формула"),
+        ("Недостаточно данных в условии", "Недостаточно данных в условии"),
+    ]
     return {
         "problemId": problem.get("external_id"),
         "topic": problem.get("topic") or "Тема",
-        "question": problem.get("condition") or "Вопрос",
-        "answers": [
-            answer,
-            "Ответ не соответствует условию",
-            "Нужно другое правило или формула",
-            "Недостаточно данных в условии",
-        ],
+        "question": question_plain,
+        "questionHtml": condition_html or question_plain,
+        "answers": [answer, *[text for text, _ in distractors]],
+        "answersHtml": [answer_html or answer, *[html for _, html in distractors]],
         "correctIndex": 0,
-        "solution": problem.get("solution") or "",
+        "solution": plain_text_from_content(problem.get("solution") or "") or solution_html,
+        "solutionHtml": solution_html,
     }
 
 
@@ -81,13 +116,19 @@ def _build_single_mcq_with_ai(
             and isinstance(correct_index, int)
             and 0 <= correct_index < len(answers)
         ):
+            question_html = rich_content_to_html(data["question"])
+            solution_raw = data.get("solution") or problem.get("solution") or ""
+            solution_html = rich_content_to_html(solution_raw)
             return {
                 "problemId": data.get("problemId") or problem.get("external_id"),
                 "topic": data.get("topic") or problem.get("topic"),
-                "question": data["question"],
+                "question": plain_text_from_content(data["question"]) or str(data["question"]),
+                "questionHtml": question_html or rich_content_to_html(problem.get("condition") or ""),
                 "answers": [str(a) for a in answers[:4]],
+                "answersHtml": [rich_content_to_html(a) or str(a) for a in answers[:4]],
                 "correctIndex": correct_index,
-                "solution": data.get("solution") or problem.get("solution") or "",
+                "solution": plain_text_from_content(solution_raw) or str(solution_raw),
+                "solutionHtml": solution_html,
             }
     except Exception:
         pass
@@ -191,9 +232,10 @@ def generate_multi_subject_test(
     }
 
 
-def _local_score(answers: list[dict]) -> dict:
+def _local_score(answers: list) -> dict:
+    answers = _serialize_answers(answers)
     total = len(answers)
-    correct_count = sum(1 for a in answers if a.get("correct"))
+    correct_count = sum(1 for a in answers if _answer_field(a, "correct", False))
     percent = round((correct_count / total) * 100) if total else 0
     level = "сильный" if percent >= 80 else "средний" if percent >= 50 else "начальный"
     return {
@@ -213,13 +255,14 @@ def analyze_test(
 ) -> dict:
     subject = data_service.get_subject(subject_id)
     subject_name = subject_name or (subject["name"] if subject else "предмету")
+    answers = _serialize_answers(answers)
     stats = _local_score(answers)
-    wrong = [a for a in answers if not a.get("correct")]
+    wrong = [a for a in answers if not _answer_field(a, "correct", False)]
     gaps = list(
         dict.fromkeys(
-            str(a.get("topic") or "").strip()
+            str(_answer_field(a, "topic", "") or "").strip()
             for a in wrong
-            if str(a.get("topic") or "").strip()
+            if str(_answer_field(a, "topic", "") or "").strip()
         )
     )
 
@@ -244,7 +287,7 @@ def analyze_test(
                         "role": "user",
                         "content": f"""Предмет: {subject_name}.
 Результаты:
-{json.dumps(answers, ensure_ascii=False)}
+{json.dumps(answers, ensure_ascii=False, default=str)}
 
 Формат:
 {{
@@ -301,17 +344,17 @@ def analyze_test(
     for item in wrong:
         breakdowns.append(
             {
-                "question": item.get("question"),
-                "topic": item.get("topic"),
+                "question": _answer_field(item, "question", ""),
+                "topic": _answer_field(item, "topic", ""),
                 "explanation": (
-                    f"Правильный ответ: {item.get('correctAnswer')}. "
-                    f"Ваш ответ: {item.get('selectedAnswer')}. "
+                    f"Правильный ответ: {_answer_field(item, 'correctAnswer', '')}. "
+                    f"Ваш ответ: {_answer_field(item, 'selectedAnswer', '')}. "
                     "Повторите правило темы и разберите похожий пример."
                 ),
                 "chatPrompt": (
-                    f"Разбери подробно задачу по теме «{item.get('topic')}»: "
-                    f"{item.get('question')}. Мой ответ: {item.get('selectedAnswer')}. "
-                    f"Правильный: {item.get('correctAnswer')}."
+                    f"Разбери подробно задачу по теме «{_answer_field(item, 'topic', '')}»: "
+                    f"{_answer_field(item, 'question', '')}. Мой ответ: {_answer_field(item, 'selectedAnswer', '')}. "
+                    f"Правильный: {_answer_field(item, 'correctAnswer', '')}."
                 ),
             }
         )
@@ -334,6 +377,7 @@ def analyze_test(
 def analyze_multi_subject_test(
     subject_ids: list[str], answers: list[dict], *, exam_type: str = "ЕГЭ"
 ) -> dict:
+    answers = _serialize_answers(answers)
     all_gaps = []
     analyses = []
     exam_scores = []
@@ -343,7 +387,7 @@ def analyze_multi_subject_test(
         subject = data_service.get_subject(subject_id)
         if not subject:
             continue
-        subject_answers = [a for a in answers if a.get("subjectId") == subject_id]
+        subject_answers = [a for a in answers if _answer_field(a, "subjectId", "") == subject_id]
         if not subject_answers and len(subject_ids) == 1:
             subject_answers = answers
         if not subject_answers:
@@ -366,7 +410,11 @@ def analyze_multi_subject_test(
     avg_score = round(sum(exam_scores) / len(exam_scores)) if exam_scores else 0
     if is_oge(exam_type):
         avg_score = max(2, min(5, avg_score))
-    percent = round(sum(a.get("correct", False) for a in answers) / len(answers) * 100) if answers else 0
+    percent = (
+        round(sum(1 for a in answers if _answer_field(a, "correct", False)) / len(answers) * 100)
+        if answers
+        else 0
+    )
     if is_oge(exam_type):
         level = (
             "сильный"

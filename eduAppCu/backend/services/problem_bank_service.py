@@ -11,6 +11,7 @@ from services.db import (
     init_problem_bank_table,
     insert_problem_bank_batch,
 )
+from services.content_utils import plain_text_from_content, rich_content_to_html
 from services.exam_utils import is_oge as exam_is_oge, normalize_exam_type
 from services.oge_sdamgia_client import OgeSdamGIA, SUBJECT_TO_OGE_HOST
 
@@ -134,6 +135,7 @@ def _matches_topic_similar(*names: str, topic_filter: str) -> bool:
 
 
 def _strip_html(value: Any) -> str:
+    """Strip HTML but preserve images and math formulas."""
     if value is None:
         return ""
     if isinstance(value, dict):
@@ -145,8 +147,35 @@ def _strip_html(value: Any) -> str:
     if isinstance(value, list):
         return " ".join(_strip_html(item) for item in value).strip()
     text = unescape(str(value))
+    # Preserve img tags and math formulas (latex, mathml)
+    # First, temporarily replace img tags and math content with placeholders
+    img_placeholders = []
+    def replace_img(match):
+        img_placeholders.append(match.group(0))
+        return f"__IMG_{len(img_placeholders)-1}__"
+    
+    math_placeholders = []
+    def replace_math(match):
+        math_placeholders.append(match.group(0))
+        return f"__MATH_{len(math_placeholders)-1}__"
+    
+    # Replace img tags
+    text = re.sub(r'<img[^>]*>', replace_img, text, flags=re.IGNORECASE)
+    # Replace math formulas (both $...$ and \[...\] and <math>...</math>)
+    text = re.sub(r'\$[^$]+\$', replace_math, text)
+    text = re.sub(r'\\\[[^\]]+\\\]', replace_math, text)
+    text = re.sub(r'<math[^>]*>.*?</math>', replace_math, text, flags=re.IGNORECASE | re.DOTALL)
+    
+    # Strip remaining HTML tags
     text = re.sub(r"<[^>]+>", " ", text)
     text = re.sub(r"\s+", " ", text)
+    
+    # Restore img tags and math formulas
+    for i, img in enumerate(img_placeholders):
+        text = text.replace(f"__IMG_{i}__", img)
+    for i, math in enumerate(math_placeholders):
+        text = text.replace(f"__MATH_{i}__", math)
+    
     return text.strip()
 
 
@@ -156,13 +185,19 @@ def _normalize_problem_row(
     external_id = str(row.get("external_id") or row.get("id") or "")
     if exam_is_oge(exam_type) and external_id and not external_id.startswith("oge-"):
         external_id = f"oge-{external_id}"
+
+    condition_raw = row.get("conditionHtml") or row.get("condition")
+    solution_raw = row.get("solutionHtml") or row.get("solution")
+    condition_html = rich_content_to_html(condition_raw)
+    solution_html = rich_content_to_html(solution_raw)
+
     return {
         "subject_id": subject_id,
         "external_id": external_id,
         "topic": str(row.get("topic") or "Общая тема").strip(),
-        "condition": _strip_html(row.get("condition")),
-        "solution": _strip_html(row.get("solution")),
-        "answer": _strip_html(row.get("answer")),
+        "condition": condition_html,
+        "solution": solution_html,
+        "answer": plain_text_from_content(row.get("answer")) or _strip_html(row.get("answer")),
         "url": str(row.get("url") or "").strip(),
     }
 
@@ -265,8 +300,10 @@ def _fetch_problems_from_categories(
             if not problem_data:
                 continue
 
-            condition = _strip_html(problem_data.get("condition"))
-            if len(condition) < 10:
+            condition_raw = problem_data.get("conditionHtml") or problem_data.get("condition")
+            condition_html = rich_content_to_html(condition_raw)
+            condition_plain = plain_text_from_content(condition_raw)
+            if len(condition_plain) < 10 and "<img" not in condition_html.lower():
                 continue
 
             seen_ids.add(problem_key)
@@ -276,8 +313,10 @@ def _fetch_problems_from_categories(
                     {
                         "external_id": problem_key,
                         "topic": category_name,
-                        "condition": condition,
-                        "solution": problem_data.get("solution"),
+                        "condition": condition_raw,
+                        "conditionHtml": condition_html,
+                        "solution": problem_data.get("solutionHtml") or problem_data.get("solution"),
+                        "solutionHtml": problem_data.get("solutionHtml"),
                         "answer": problem_data.get("answer"),
                         "url": problem_data.get("url", ""),
                     },
@@ -385,7 +424,8 @@ def get_problems_for_test(
             if not eid or eid in seen:
                 continue
             condition = row.get("condition") or ""
-            if len(condition) < 10:
+            condition_plain = plain_text_from_content(condition)
+            if len(condition_plain) < 10 and "<img" not in condition.lower():
                 continue
             seen.add(eid)
             collected.append(row)

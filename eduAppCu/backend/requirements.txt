@@ -1,5 +1,9 @@
-flask==3.1.0
-flask-cors==5.0.1
+fastapi==0.115.0
+uvicorn==0.30.0
+python-multipart==0.0.6
 openai==1.57.0
 python-dotenv==1.0.0
 sdamgia-api==0.1.7
+pydantic==2.9.2
+psycopg2-binary
+sqlalchemy==2.0.23

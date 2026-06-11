@@ -11,7 +11,7 @@ const iconMap = {
 };
 
 export default function ChatScreen() {
-  const { activeSubjectId, activeSubject, pendingChatPrompt, clearPendingChatPrompt } = useApp();
+  const { activeSubjectId, activeSubject, pendingChatPrompt, clearPendingChatPrompt, account, premium } = useApp();
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 1,
@@ -52,7 +52,7 @@ export default function ChatScreen() {
       setSending(true);
 
       try {
-        const reply = await api.chat(msg, activeSubjectId);
+        const reply = await api.chat(msg, activeSubjectId, undefined, account.email);
         setMessages((prev) => [
           ...prev,
           { id: Date.now() + 1, role: 'assistant', content: reply.content },
@@ -73,7 +73,7 @@ export default function ChatScreen() {
         setSending(false);
       }
     },
-    [activeSubjectId, inputText, sending]
+    [activeSubjectId, account.email, inputText, sending]
   );
 
   const pendingHandled = useRef(false);
@@ -187,7 +187,9 @@ export default function ChatScreen() {
             </button>
           </div>
           <p className="text-xs text-muted-foreground text-center mt-3">
-            AI может ошибаться. Проверяй важную информацию.
+            {premium?.isPremium
+              ? 'AI может ошибаться. Проверяй важную информацию.'
+              : 'Для доступа к ИИ-чату активируйте премиум ключ в профиле.'}
           </p>
         </div>
       </div>
