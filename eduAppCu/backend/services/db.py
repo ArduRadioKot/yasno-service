@@ -548,6 +548,22 @@ def get_user_by_id(user_id: int) -> Optional[Dict[str, Any]]:
     return dict(row) if row else None
 
 
+def update_user_password(user_id: int, new_password: str) -> bool:
+    """Update user password."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                "UPDATE users SET password = %s WHERE id = %s",
+                (new_password, user_id)
+            )
+            conn.commit()
+            return True
+        except Exception as e:
+            conn.rollback()
+            raise e
+
+
 def get_user_subjects(user_id: int) -> List[str]:
     """Get list of subject IDs for a user."""
     with get_db_connection() as conn:

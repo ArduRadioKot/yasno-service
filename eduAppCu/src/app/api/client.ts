@@ -71,6 +71,23 @@ export const notifyTestComplete = () => {
 };
 
 const API_BASE = '/api';
+const TOKEN_KEY = 'edu-auth-token';
+
+let authToken: string | null = localStorage.getItem(TOKEN_KEY);
+
+export const setAuthToken = (token: string) => {
+  authToken = token;
+  localStorage.setItem(TOKEN_KEY, token);
+};
+
+export const getAuthToken = (): string | null => {
+  return authToken;
+};
+
+export const clearAuthToken = () => {
+  authToken = null;
+  localStorage.removeItem(TOKEN_KEY);
+};
 
 function sanitizeUserMessage(message: string): string {
   return message
@@ -80,8 +97,13 @@ function sanitizeUserMessage(message: string): string {
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const headers: HeadersInit = { 'Content-Type': 'application/json', ...(options?.headers as HeadersInit) };
+  if (authToken) {
+    (headers as Record<string, string>)['Authorization'] = `Bearer ${authToken}`;
+  }
+  
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    headers,
     ...options,
   });
   if (!res.ok) {
@@ -126,6 +148,7 @@ export const api = {
 
   login: (data: { email: string; password: string }) =>
     request<{
+      token: string;
       email: string;
       firstName: string;
       lastName: string;
@@ -136,6 +159,11 @@ export const api = {
     }>('/login', {
       method: 'POST',
       body: JSON.stringify(data),
+    }).then((response) => {
+      if (response.token) {
+        setAuthToken(response.token);
+      }
+      return response;
     }),
 
   register: (data: {
@@ -148,9 +176,14 @@ export const api = {
     subjects?: string[];
     targets?: Record<string, number>;
   }) =>
-    request<{ userId: number; message: string }>('/register', {
+    request<{ token: string; userId: number; message: string }>('/register', {
       method: 'POST',
       body: JSON.stringify(data),
+    }).then((response) => {
+      if (response.token) {
+        setAuthToken(response.token);
+      }
+      return response;
     }),
 
   setSubject: (subjectId: string) =>
@@ -305,4 +338,27 @@ export const api = {
         body: JSON.stringify({ answers, subjectIds, subjectId, email, examType }),
       }
     ),
+
+  logout: () => {
+    clearAuthToken();
+  },
+
+  getCurrentUser: () => {
+    return request<{
+      email: string;
+      firstName: string;
+      lastName: string;
+      examType: string;
+      marketing: boolean;
+      subjects: string[];
+      targets: Record<string, number>;
+    }>('/user/me');
+  },
+
+  changePassword: (currentPassword: string, newPassword: string) => {
+    return request<{ message: string }>('/user/change-password', {
+      method: 'POST',
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
+  },
 };

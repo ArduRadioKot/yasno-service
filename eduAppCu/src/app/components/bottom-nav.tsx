@@ -21,7 +21,7 @@ type BottomNavProps = {
 
 export default function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
   return (
-    <nav className="md:hidden shrink-0 bg-white border-t border-border z-50">
+    <nav className="md:hidden shrink-0 bg-white border-t border-border z-40">
       <div className="max-w-lg mx-auto px-2 py-2">
         <div className="flex items-center justify-around">
           {navItems.map((item) => {

@@ -24,6 +24,7 @@ import { useApp } from '../context/AppContext';
 import type { AiTestAnalysis, AiTestAnswer, AiTestBreakdown, AiTestData, Task, TaskCheckResult } from '../types';
 import { HtmlRenderer } from './HtmlRenderer';
 import { LoadingProgress } from './LoadingProgress';
+import { LoadingOverlay } from './LoadingOverlay';
 
 export default function TaskScreen() {
   const { activeSubjectId, taskSessionKey, account, onNavigateToChat, setActiveSubject } = useApp();
@@ -308,7 +309,7 @@ export default function TaskScreen() {
 
   if (generatingTest) {
     return (
-      <div className="h-full flex items-center justify-center bg-[#F3F4F6]">
+      <LoadingOverlay>
         <LoadingProgress
           title="Составляем тест из банка"
           description={`Загружаем ${testQuestionCount} задач и формируем варианты ответов`}
@@ -319,7 +320,7 @@ export default function TaskScreen() {
             'Почти готово…',
           ]}
         />
-      </div>
+      </LoadingOverlay>
     );
   }
 
@@ -366,7 +367,7 @@ export default function TaskScreen() {
   // Show AI test analysis
   if (analyzing) {
     return (
-      <div className="h-full flex items-center justify-center bg-[#F3F4F6]">
+      <LoadingOverlay>
         <LoadingProgress
           title="Составляем аналитику"
           description={`ИИ проверяет ответы и считает прогноз ${isOgeExam ? 'оценки (2–5)' : 'баллов'}`}
@@ -377,7 +378,7 @@ export default function TaskScreen() {
             'Обновляем ваш план…',
           ]}
         />
-      </div>
+      </LoadingOverlay>
     );
   }
 
@@ -444,7 +445,7 @@ export default function TaskScreen() {
             
             <div className="bg-[#F7F7FA] rounded-2xl p-6 border border-border mb-6">
               <h3 className="font-semibold text-lg mb-3">Рекомендации</h3>
-              <p className="leading-relaxed">{analysis.analysis}</p>
+              <HtmlRenderer html={analysis.analysis} className="leading-relaxed" />
             </div>
             
             {analysis.gaps.length > 0 && (
@@ -611,18 +612,20 @@ export default function TaskScreen() {
         </div>
 
         <div className="max-w-3xl mx-auto p-4 sm:p-6">
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-border mb-6">
-            <div className="flex items-start gap-3 mb-4">
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-border mb-6 overflow-hidden">
+            <div className="flex items-start gap-3 mb-4 min-w-0">
               <div className="bg-[#6D3DF5] rounded-xl size-10 flex items-center justify-center text-white font-bold shrink-0">
                 {currentQuestionIndex + 1}
               </div>
-              <h3 className="font-semibold text-lg flex-1">
-                {currentQuestion.questionHtml ? (
-                  <HtmlRenderer html={currentQuestion.questionHtml} />
-                ) : (
-                  currentQuestion.question
-                )}
-              </h3>
+              <div className="min-w-0 flex-1 overflow-x-auto">
+                <h3 className="font-semibold text-lg">
+                  {currentQuestion.questionHtml ? (
+                    <HtmlRenderer html={currentQuestion.questionHtml} />
+                  ) : (
+                    currentQuestion.question
+                  )}
+                </h3>
+              </div>
             </div>
           </div>
 
@@ -634,9 +637,9 @@ export default function TaskScreen() {
                   key={index}
                   onClick={() => handleAiTestAnswer(index)}
                   disabled={analyzing}
-                  className="w-full text-left p-4 rounded-xl border-2 border-border bg-white hover:border-[#6D3DF5] hover:bg-[#6D3DF5]/5 transition-colors disabled:opacity-50"
+                  className="w-full text-left p-4 rounded-xl border-2 border-border bg-white hover:border-[#6D3DF5] hover:bg-[#6D3DF5]/5 transition-colors disabled:opacity-50 overflow-hidden"
                 >
-                  <span className="font-medium">
+                  <span className="font-medium block min-w-0 overflow-x-auto">
                     {currentQuestion.answersHtml && currentQuestion.answersHtml[index] ? (
                       <HtmlRenderer html={currentQuestion.answersHtml[index]} />
                     ) : (

@@ -27,6 +27,7 @@ import { clampTargetForExam, formatTargetShort } from '../utils/exam';
 import type { DashboardData, PlanTopicBrief } from '../types';
 import SubjectSelector from './subject-selector';
 import { LoadingProgress } from './LoadingProgress';
+import { LoadingOverlay } from './LoadingOverlay';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -535,7 +536,7 @@ export default function DashboardScreen() {
       </Dialog>
 
       {generatingTest && (
-        <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-6">
+        <LoadingOverlay>
           <LoadingProgress
             title={
               generatingTopicName
@@ -554,7 +555,7 @@ export default function DashboardScreen() {
               'Почти готово…',
             ]}
           />
-        </div>
+        </LoadingOverlay>
       )}
     </div>
   );

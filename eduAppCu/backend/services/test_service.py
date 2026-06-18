@@ -78,6 +78,22 @@ def _fallback_mcq(problem: dict, exam_type: str = "ЕГЭ") -> dict:
     }
 
 
+def _merge_question_html(ai_html: str, condition_html: str, ai_text: str = "") -> str:
+    """Prefer AI paraphrase, but keep tables/images from the bank condition."""
+    ai_html = (ai_html or "").strip()
+    condition_html = (condition_html or "").strip()
+    if not condition_html:
+        return ai_html or ai_text
+    cond_lower = condition_html.lower()
+    has_rich = any(token in cond_lower for token in ("<img", "<table", "wrap_flex_table"))
+    if has_rich:
+        intro = f"<p>{ai_text}</p>" if ai_text else ai_html
+        if intro and intro not in condition_html:
+            return f'<div class="sdamgia-question-intro">{intro}</div>{condition_html}'
+        return condition_html
+    return ai_html or condition_html or ai_text
+
+
 def _build_single_mcq_with_ai(
     problem: dict, subject_name: str, exam_type: str = "ЕГЭ"
 ) -> dict:
@@ -134,13 +150,17 @@ def _build_single_mcq_with_ai(
             solution_raw = data.get("solution") or problem.get("solution") or ""
             solution_html = rich_content_to_html(solution_raw, base_url=base_url)
             ai_question_html = rich_content_to_html(data["question"], base_url=base_url)
+            ai_question_text = plain_text_from_content(data["question"]) or str(data["question"])
+            question_html = _merge_question_html(
+                ai_question_html,
+                condition_html,
+                ai_question_text,
+            )
             return {
                 "problemId": data.get("problemId") or problem.get("external_id"),
                 "topic": data.get("topic") or problem.get("topic"),
-                "question": plain_text_from_content(data["question"]) or plain_text_from_content(
-                    problem.get("condition") or ""
-                ),
-                "questionHtml": condition_html or ai_question_html,
+                "question": ai_question_text or plain_text_from_content(problem.get("condition") or ""),
+                "questionHtml": question_html,
                 "answers": [str(a) for a in answers[:4]],
                 "answersHtml": [
                     rich_content_to_html(a, base_url=base_url) or str(a) for a in answers[:4]

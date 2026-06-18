@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Send, Sparkles, BookOpen, FileQuestion, Zap, Loader2, Hand } from 'lucide-react';
 import { api } from '../api/client';
 import { useApp } from '../context/AppContext';
+import { HtmlRenderer } from './HtmlRenderer';
 import type { ChatMessage } from '../types';
 
 const iconMap = {
@@ -126,13 +127,11 @@ export default function ChatScreen() {
                     <span className="text-xs font-semibold text-[#6D3DF5]">Ясно!</span>
                   </div>
                 )}
-                <p
-                  className={`leading-relaxed whitespace-pre-line ${
-                    message.role === 'assistant' ? 'text-foreground' : ''
-                  }`}
-                >
-                  {message.content}
-                </p>
+                {message.role === 'assistant' ? (
+                  <HtmlRenderer html={message.content} className="leading-relaxed" />
+                ) : (
+                  <p className="leading-relaxed whitespace-pre-line">{message.content}</p>
+                )}
               </div>
             </div>
           ))}

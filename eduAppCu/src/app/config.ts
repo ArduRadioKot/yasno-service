@@ -2,7 +2,7 @@
 export const config = {
   // Backend API URL for serving static files (images, etc.)
   // Falls back to localhost:8000 for development
-  apiUrl: import.meta.env.VITE_API_URL || 'http://localhost:5001',
+  apiUrl: import.meta.env.VITE_API_URL || 'http://localhost:8000',
   
   // Image loading configuration
   images: {
@@ -20,32 +20,30 @@ export const config = {
 // Helper function to resolve image URLs
 export function resolveImageUrl(src: string): string {
   if (!src) return config.images.fallback;
-  
-  // If it's already an absolute URL or data URI, return as-is
-  if (src.startsWith('http://') || src.startsWith('https://') || src.startsWith('data:')) {
-    // Check if it's from an allowed external domain
-    if (src.startsWith('http')) {
+
+  const cleanSrc = src.replace(/\s+/g, '');
+
+  if (cleanSrc.startsWith('http://') || cleanSrc.startsWith('https://') || cleanSrc.startsWith('data:')) {
+    if (cleanSrc.startsWith('http')) {
       try {
-        const url = new URL(src);
+        const url = new URL(cleanSrc);
         const domain = url.hostname;
         const isAllowed = config.images.allowedDomains.some(
           (allowed) => domain === allowed || domain.endsWith(`.${allowed}`) || domain.includes(allowed)
         );
         if (isAllowed) {
-          return src;
+          return cleanSrc;
         }
-      } catch (e) {
-        console.warn('Invalid external URL:', src);
+      } catch {
+        // ignore invalid URL
       }
     }
-    return src;
+    return cleanSrc;
   }
-  
-  // If it's a relative path starting with /, prepend API base
-  if (src.startsWith('/')) {
-    return `${config.apiUrl}${src}`;
+
+  if (cleanSrc.startsWith('/')) {
+    return `${config.apiUrl}${cleanSrc}`;
   }
-  
-  // If it's a relative path without leading /, prepend API base with /
-  return `${config.apiUrl}/${src}`;
+
+  return `${config.apiUrl}/${cleanSrc}`;
 }

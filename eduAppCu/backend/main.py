@@ -3,7 +3,7 @@
 import os
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, Header, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from services.db import init_db
 
@@ -57,11 +57,49 @@ async def health():
     return {"status": "ok"}
 
 
+@app.get("/api/verify-token")
+async def verify_token_endpoint(authorization: str = Header(None)):
+    """Verify JWT token endpoint"""
+    if not authorization:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing authorization header"
+        )
+    
+    from routers.auth import verify_token, get_user_by_email
+    
+    if authorization.startswith("Bearer "):
+        token = authorization.split(" ")[1]
+    else:
+        token = authorization
+    
+    payload = verify_token(token)
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token"
+        )
+    
+    user = get_user_by_email(payload.get("email"))
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found"
+        )
+    
+    return {
+        "valid": True,
+        "email": user["email"],
+        "firstName": user.get("first_name", ""),
+        "lastName": user.get("last_name", "")
+    }
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
-        port=5001,
+        port=8000,
         reload=True
     )

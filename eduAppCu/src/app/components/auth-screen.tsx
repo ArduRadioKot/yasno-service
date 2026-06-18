@@ -9,8 +9,6 @@ import {
   OGE_GRADES,
 } from '../utils/exam';
 
-const ACCOUNT_KEY = 'edu-user-account';
-
 const subjectLabels: Record<string, string> = {
   math: 'Математика',
   physics: 'Физика',
@@ -128,7 +126,7 @@ export default function AuthScreen({ onComplete }: AuthScreenProps) {
     try {
       await api.register({
         email: nextAccount.email,
-        password: nextAccount.password,
+        password: nextAccount.password || "",
         firstName: nextAccount.firstName,
         lastName: nextAccount.lastName,
         examType: nextAccount.examType,
@@ -136,7 +134,6 @@ export default function AuthScreen({ onComplete }: AuthScreenProps) {
         subjects: nextAccount.subjects,
         targets: nextAccount.targets,
       });
-      localStorage.setItem(ACCOUNT_KEY, JSON.stringify(nextAccount));
       onComplete(nextAccount, { startDiagnostic: true });
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Ошибка при регистрации');
@@ -145,7 +142,7 @@ export default function AuthScreen({ onComplete }: AuthScreenProps) {
 
   const handleLogin = async () => {
     const email = account.email.trim();
-    const password = account.password;
+    const password = account.password || '';
     if (!email || !password) {
       setError('Введите почту и пароль');
       return;
@@ -157,7 +154,6 @@ export default function AuthScreen({ onComplete }: AuthScreenProps) {
       const user = await api.login({ email, password });
       const nextAccount: UserAccount = {
         email: user.email,
-        password,
         firstName: user.firstName,
         lastName: user.lastName,
         examType: user.examType === 'ОГЭ' ? 'ОГЭ' : 'ЕГЭ',
@@ -165,23 +161,8 @@ export default function AuthScreen({ onComplete }: AuthScreenProps) {
         targets: user.targets,
         marketing: user.marketing,
       };
-      localStorage.setItem(ACCOUNT_KEY, JSON.stringify(nextAccount));
       onComplete(nextAccount);
     } catch (loginError) {
-      try {
-        const saved = localStorage.getItem(ACCOUNT_KEY);
-        const savedAccount = saved ? (JSON.parse(saved) as UserAccount) : null;
-        if (
-          savedAccount &&
-          savedAccount.email === email &&
-          savedAccount.password === password
-        ) {
-          onComplete(savedAccount);
-          return;
-        }
-      } catch {
-        // ignore corrupted local account cache
-      }
       setError(
         loginError instanceof Error ? loginError.message : 'Не удалось войти в аккаунт'
       );
@@ -262,7 +243,7 @@ export default function AuthScreen({ onComplete }: AuthScreenProps) {
               <p className="text-sm text-[#707076] mb-8">Чтобы получить доступ к задачам</p>
               <div className="space-y-5">
                 <Field label="Почта" placeholder="email@example.com" value={account.email} onChange={(email) => update({ email })} />
-                <Field label="Пароль" placeholder="пароль" type="password" value={account.password} onChange={(password) => update({ password })} withEye />
+                <Field label="Пароль" placeholder="пароль" type="password" value={account.password || ""} onChange={(password) => update({ password })} withEye />
               </div>
               {error && <p className="text-sm text-destructive mt-4">{error}</p>}
               <button
@@ -275,12 +256,9 @@ export default function AuthScreen({ onComplete }: AuthScreenProps) {
               </button>
               <div className="flex items-center gap-3 my-8 text-sm text-[#9A9AA2]">
                 <div className="h-px bg-[#D8D8DD] flex-1" />
-                или войти через
+                или
                 <div className="h-px bg-[#D8D8DD] flex-1" />
               </div>
-              <button className="w-full h-13 rounded-xl border border-[#DDDDE4] bg-[#F7F7FA] font-semibold">
-                Войти через Т-Образование
-              </button>
               <button onClick={() => { setMode('register'); setError(''); }} className="w-full mt-5 text-sm font-semibold text-[#6D3DF5]">
                 Создать аккаунт
               </button>
@@ -293,7 +271,7 @@ export default function AuthScreen({ onComplete }: AuthScreenProps) {
                   <p className="text-sm text-[#707076] mb-8">Чтобы получить доступ к задачам</p>
                   <div className="space-y-5">
                     <Field label="Почта" placeholder="email@example.com" value={account.email} onChange={(email) => update({ email })} />
-                    <Field label="Пароль" placeholder="Надежный пароль" type="password" value={account.password} onChange={(password) => update({ password })} withEye />
+                    <Field label="Пароль" placeholder="Надежный пароль" type="password" value={account.password || ""} onChange={(password) => update({ password })} withEye />
                     <ul className="text-sm text-[#5F5F66] space-y-2 list-disc pl-4">
                       <li>Больше 8 символов</li>
                       <li>Большие и строчные буквы</li>

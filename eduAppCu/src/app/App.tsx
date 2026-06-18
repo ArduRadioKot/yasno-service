@@ -8,13 +8,14 @@ import ProfileScreen from './components/profile-screen';
 import BottomNav from './components/bottom-nav';
 import SidebarNav from './components/sidebar-nav';
 import { LoadingProgress } from './components/LoadingProgress';
+import { LoadingOverlay } from './components/LoadingOverlay';
 import { AppProvider, useApp } from './context/AppContext';
-import { api, setAiTestData } from './api/client';
+import { api, setAiTestData, clearAuthToken } from './api/client';
 import type { UserAccount } from './types';
 
-const ACCOUNT_KEY = 'edu-user-account';
 const SESSION_KEY = 'edu-user-session';
 const AUTO_DIAGNOSTIC_KEY = 'edu-auto-diagnostic';
+const TOKEN_KEY = 'edu-auth-token';
 
 function ApiBanner() {
   const { error } = useApp();
@@ -99,12 +100,14 @@ function AppShell({
       <div className="flex flex-1 flex-col md:flex-row min-h-0">
         <SidebarNav activeTab={activeTab} onTabChange={setActiveTab} />
         <div className="flex-1 flex flex-col min-h-0 min-w-0">
-          <main className="flex-1 overflow-hidden">{renderScreen()}</main>
-          <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
+          <main className="flex-1 min-h-0 overflow-hidden pb-[4.75rem] md:pb-0">{renderScreen()}</main>
+          <div className="md:hidden shrink-0">
+            <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
+          </div>
         </div>
       </div>
       {autoStarting && (
-        <div className="fixed inset-0 z-50 bg-[#F3F4F6]/90 backdrop-blur-sm flex items-center justify-center p-6">
+        <LoadingOverlay className="bg-[#F3F4F6]/90">
           <LoadingProgress
             title="Ясно! составляет тест"
             description="Проверим стартовый уровень и соберём план подготовки."
@@ -114,7 +117,7 @@ function AppShell({
               'Готовим первичную диагностику…',
             ]}
           />
-        </div>
+        </LoadingOverlay>
       )}
     </div>
   );
@@ -122,21 +125,41 @@ function AppShell({
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [account, setAccount] = useState<UserAccount | null>(() => {
-    if (!localStorage.getItem(SESSION_KEY)) return null;
-    const saved = localStorage.getItem(ACCOUNT_KEY);
-    if (!saved) return null;
-    try {
-      return JSON.parse(saved) as UserAccount;
-    } catch {
-      localStorage.removeItem(ACCOUNT_KEY);
-      localStorage.removeItem(SESSION_KEY);
-      return null;
+  const [account, setAccount] = useState<UserAccount | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Check for JWT token
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (!token) {
+      setLoading(false);
+      return;
     }
-  });
+
+    // Fetch user data from backend
+    api.getCurrentUser()
+      .then((user) => {
+        const userAccount: UserAccount = {
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          examType: user.examType === 'ОГЭ' ? 'ОГЭ' : 'ЕГЭ',
+          subjects: user.subjects.length ? user.subjects : ['math'],
+          targets: user.targets,
+          marketing: user.marketing,
+        };
+        setAccount(userAccount);
+      })
+      .catch(() => {
+        // Token invalid, clear it
+        localStorage.removeItem(TOKEN_KEY);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, []);
 
   const handleAuthComplete = (nextAccount: UserAccount, options?: { startDiagnostic?: boolean }) => {
-    localStorage.setItem(ACCOUNT_KEY, JSON.stringify(nextAccount));
     localStorage.setItem(SESSION_KEY, 'active');
     if (options?.startDiagnostic) {
       localStorage.setItem(AUTO_DIAGNOSTIC_KEY, '1');
@@ -146,15 +169,27 @@ export default function App() {
   };
 
   const handleAccountChange = (nextAccount: UserAccount) => {
-    localStorage.setItem(ACCOUNT_KEY, JSON.stringify(nextAccount));
     setAccount(nextAccount);
   };
 
   const handleLogout = () => {
     localStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem(TOKEN_KEY);
+    clearAuthToken();
     setAccount(null);
     setActiveTab('dashboard');
   };
+
+  if (loading) {
+    return (
+      <div className="h-full flex items-center justify-center bg-[#F3F4F6]">
+        <div className="text-center">
+          <div className="size-8 border-4 border-[#6D3DF5] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-muted-foreground">Загрузка...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!account) {
     return <AuthScreen onComplete={handleAuthComplete} />;

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Crown, Loader2, LogOut, Mail, Sparkles, Target, UserRound } from 'lucide-react';
+import { Crown, Loader2, LogOut, Mail, Sparkles, Target, UserRound, Lock } from 'lucide-react';
 import { api } from '../api/client';
 import { useApp } from '../context/AppContext';
 import { formatTargetShort } from '../utils/exam';
@@ -31,6 +31,15 @@ export default function ProfileScreen() {
   const [activating, setActivating] = useState(false);
   const [premiumMessage, setPremiumMessage] = useState('');
   const [premiumError, setPremiumError] = useState('');
+  
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [passwordMessage, setPasswordMessage] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [showPasswordSection, setShowPasswordSection] = useState(false);
+  
   const name = `${account.firstName || 'Ученик'} ${account.lastName || ''}`.trim();
 
   const handleActivatePremium = async () => {
@@ -56,6 +65,45 @@ export default function ProfileScreen() {
       );
     } finally {
       setActivating(false);
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      setPasswordError('Заполните все поля');
+      setPasswordMessage('');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setPasswordError('Новые пароли не совпадают');
+      setPasswordMessage('');
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      setPasswordError('Пароль должен быть не менее 8 символов');
+      setPasswordMessage('');
+      return;
+    }
+
+    setChangingPassword(true);
+    setPasswordError('');
+    setPasswordMessage('');
+
+    try {
+      await api.changePassword(currentPassword, newPassword);
+      setPasswordMessage('Пароль успешно изменён');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setShowPasswordSection(false);
+    } catch (error) {
+      setPasswordError(
+        error instanceof Error ? error.message : 'Не удалось сменить пароль'
+      );
+    } finally {
+      setChangingPassword(false);
     }
   };
 
@@ -140,7 +188,7 @@ export default function ProfileScreen() {
           )}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           <div className="bg-white border border-border rounded-2xl p-6 shadow-sm">
             <div className="flex items-center gap-3 mb-5">
               <div className="size-11 rounded-2xl bg-[#6D3DF5]/10 flex items-center justify-center">
@@ -185,6 +233,81 @@ export default function ProfileScreen() {
               ))}
             </div>
           </div>
+        </div>
+
+        <div className="bg-white border border-border rounded-2xl p-6 shadow-sm mb-6">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="size-11 rounded-2xl bg-[#6D3DF5]/10 flex items-center justify-center">
+              <Lock className="size-5 text-[#6D3DF5]" />
+            </div>
+            <h2 className="font-semibold text-lg">Безопасность</h2>
+          </div>
+          
+          {!showPasswordSection ? (
+            <button
+              onClick={() => setShowPasswordSection(true)}
+              className="w-full h-12 rounded-xl border border-[#DDDDE4] bg-[#F7F7FA] text-base font-medium hover:bg-white hover:border-[#6D3DF5] transition-colors"
+            >
+              Изменить пароль
+            </button>
+          ) : (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm text-muted-foreground mb-2">Текущий пароль</label>
+                <input
+                  type="password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  placeholder="Введите текущий пароль"
+                  className="w-full h-12 rounded-xl border border-[#DDDDE4] bg-[#F7F7FA] px-4 text-base outline-none focus:border-[#6D3DF5] focus:bg-white transition-colors"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-muted-foreground mb-2">Новый пароль</label>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Минимум 8 символов"
+                  className="w-full h-12 rounded-xl border border-[#DDDDE4] bg-[#F7F7FA] px-4 text-base outline-none focus:border-[#6D3DF5] focus:bg-white transition-colors"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-muted-foreground mb-2">Подтвердите новый пароль</label>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Повторите новый пароль"
+                  className="w-full h-12 rounded-xl border border-[#DDDDE4] bg-[#F7F7FA] px-4 text-base outline-none focus:border-[#6D3DF5] focus:bg-white transition-colors"
+                />
+              </div>
+              {passwordError && <p className="text-sm text-destructive">{passwordError}</p>}
+              {passwordMessage && <p className="text-sm text-[#6D3DF5]">{passwordMessage}</p>}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowPasswordSection(false);
+                    setCurrentPassword('');
+                    setNewPassword('');
+                    setConfirmPassword('');
+                    setPasswordError('');
+                    setPasswordMessage('');
+                  }}
+                  className="flex-1 h-12 rounded-xl border border-[#DDDDE4] bg-[#F7F7FA] text-base font-medium hover:bg-white transition-colors"
+                >
+                  Отмена
+                </button>
+                <button
+                  onClick={handleChangePassword}
+                  disabled={changingPassword}
+                  className="flex-1 h-12 rounded-xl bg-[#6D3DF5] text-white font-semibold disabled:opacity-60"
+                >
+                  {changingPassword ? <Loader2 className="size-4 animate-spin mx-auto" /> : 'Сохранить'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

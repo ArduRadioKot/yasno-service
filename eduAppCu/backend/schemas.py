@@ -10,6 +10,7 @@ class LoginRequest(BaseModel):
 
 
 class LoginResponse(BaseModel):
+    token: str
     email: str
     firstName: str
     lastName: str
@@ -31,14 +32,24 @@ class RegisterRequest(BaseModel):
 
 
 class RegisterResponse(BaseModel):
+    token: str
     userId: int
     message: str
 
 
+class ChangePasswordRequest(BaseModel):
+    currentPassword: str
+    newPassword: str
+
+
 class UserResponse(BaseModel):
-    userName: str
-    activeSubjectId: str
-    completedTaskIds: List[str]
+    email: str
+    firstName: str
+    lastName: str
+    examType: str
+    marketing: bool
+    subjects: List[str]
+    targets: Dict[str, int]
 
 
 class SubjectResponse(BaseModel):

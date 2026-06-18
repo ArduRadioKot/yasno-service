@@ -185,3 +185,49 @@
     line-height: 1.5;
   }
 }
+
+.sdamgia-html {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.6;
+}
+
+.sdamgia-html img {
+  max-width: 100%;
+  height: auto;
+  display: inline-block;
+  vertical-align: middle;
+  margin: 4px 0;
+  border-radius: 8px;
+}
+
+.sdamgia-html img.sdamgia-image-fallback {
+  max-width: 120px;
+  opacity: 0.7;
+}
+
+.sdamgia-html table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+
+.sdamgia-html .wrap_flex_table {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  max-width: 100%;
+}
+
+.sdamgia-html .wrap_flex_table_col {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.sdamgia-html pre,
+.sdamgia-html code {
+  white-space: pre-wrap;
+  word-break: break-word;
+}

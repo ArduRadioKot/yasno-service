@@ -10,7 +10,7 @@ export type Subject = {
 
 export type UserAccount = {
   email: string;
-  password: string;
+  password?: string;
   firstName: string;
   lastName: string;
   examType: 'ОГЭ' | 'ЕГЭ';
