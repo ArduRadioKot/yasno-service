@@ -7,9 +7,11 @@ from datetime import datetime
 from typing import Optional, List, Dict, Any
 from contextlib import contextmanager
 import psycopg2
+from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
 from dotenv import load_dotenv
 import uuid
+import threading
 
 load_dotenv()
 
@@ -20,26 +22,71 @@ DB_NAME = os.getenv("DB_NAME", "edu_app")
 DB_USER = os.getenv("DB_USER", "postgres")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "password")
 
+# Connection pool settings
+MIN_POOL_SIZE = 1
+MAX_POOL_SIZE = 10
+
+# Thread-safe connection pool
+_pool_lock = threading.Lock()
+_connection_pool = None
+
+def get_connection_pool():
+    """Get or create the connection pool (thread-safe)."""
+    global _connection_pool
+    with _pool_lock:
+        if _connection_pool is None:
+            _connection_pool = pool.SimpleConnectionPool(
+                minconn=MIN_POOL_SIZE,
+                maxconn=MAX_POOL_SIZE,
+                host=DB_HOST,
+                port=DB_PORT,
+                database=DB_NAME,
+                user=DB_USER,
+                password=DB_PASSWORD
+            )
+        return _connection_pool
 
 @contextmanager
 def get_db_connection():
-    """Create and return a database connection context manager."""
-    conn = psycopg2.connect(
-        host=DB_HOST,
-        port=DB_PORT,
-        database=DB_NAME,
-        user=DB_USER,
-        password=DB_PASSWORD
-    )
-    conn.autocommit = False
+    """Create and return a database connection from the pool."""
+    pool = get_connection_pool()
+    conn = pool.getconn()
     try:
+        conn.autocommit = False
         yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
     finally:
-        conn.close()
+        pool.putconn(conn)
+
+def close_all_connections():
+    """Close all connections in the pool (for cleanup)."""
+    global _connection_pool
+    with _pool_lock:
+        if _connection_pool:
+            _connection_pool.closeall()
+            _connection_pool = None
 
 
 def init_db():
     """Initialize the database with required tables."""
+    # Check if already initialized to prevent spam
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables 
+                    WHERE table_name = 'users'
+                )
+            """)
+            if cursor.fetchone()[0]:
+                return  # Already initialized
+    except Exception:
+        pass  # Continue with initialization if check fails
+    
     with get_db_connection() as conn:
         cursor = conn.cursor()
         
