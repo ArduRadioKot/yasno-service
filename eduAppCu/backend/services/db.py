@@ -189,7 +189,6 @@ def init_db():
             )
         """)
         
-        conn.commit()
         print("✅ Database initialized successfully")
 
 
@@ -230,7 +229,6 @@ def create_premium_key(duration_days: int = 30) -> str:
             RETURNING key
         """, (key, duration_days))
         result = cursor.fetchone()
-        conn.commit()
 
     return result[0] if result else key
 
@@ -310,7 +308,6 @@ def activate_premium_key(key: str, user_id: int) -> Dict[str, Any]:
             SET premium_key_id = (SELECT id FROM premium_keys WHERE UPPER(key) = %s)
             WHERE id = %s
         """, (normalized_key, user_id))
-        conn.commit()
 
     return {
         "valid": True,
@@ -449,7 +446,6 @@ def insert_problem_bank_batch(rows: list[dict]) -> None:
                 )
             except Exception:
                 pass
-        conn.commit()
 
 
 def get_problem_bank_random(subject_id: str, count: int) -> list[dict]:
@@ -604,10 +600,8 @@ def update_user_password(user_id: int, new_password: str) -> bool:
                 "UPDATE users SET password = %s WHERE id = %s",
                 (new_password, user_id)
             )
-            conn.commit()
             return True
         except Exception as e:
-            conn.rollback()
             raise e
 
 
@@ -739,7 +733,6 @@ def upsert_user_progress(
                 values
             )
         
-        conn.commit()
     
     return get_user_progress(user_id, subject_id) or {}
 
