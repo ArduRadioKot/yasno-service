@@ -155,7 +155,7 @@ def list_keys_cmd(message):
 @bot.callback_query_handler(func=lambda call: call.data == "pay")
 def handle_payment(call):
     try:
-        prices = [types.LabeledPrice(label="Премиум подписка", amount=10000)]
+        prices = [types.LabeledPrice(label="Премиум подписка", amount=1)]
 
         bot.send_invoice(
             call.from_user.id,
