@@ -12,6 +12,7 @@ import { LoadingOverlay } from './components/LoadingOverlay';
 import { AppProvider, useApp } from './context/AppContext';
 import { api, setAiTestData, clearAuthToken } from './api/client';
 import type { UserAccount } from './types';
+import LandingPage from './components/LandingPage';
 
 const SESSION_KEY = 'edu-user-session';
 const AUTO_DIAGNOSTIC_KEY = 'edu-auto-diagnostic';
@@ -22,7 +23,7 @@ function ApiBanner() {
   if (!error) return null;
   return (
     <div className="bg-destructive/10 text-destructive px-4 py-2 text-sm text-center border-b border-destructive/20 shrink-0">
-      {error} — в отдельном терминале: <strong>npm run backend</strong>
+      {error} — проверьте подключенние к интернету или перезагрузите страницу
     </div>
   );
 }
@@ -127,6 +128,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [account, setAccount] = useState<UserAccount | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showLanding, setShowLanding] = useState(true);
 
   useEffect(() => {
     // Check for JWT token
@@ -135,6 +137,9 @@ export default function App() {
       setLoading(false);
       return;
     }
+
+    // If user has token, skip landing page
+    setShowLanding(false);
 
     // Fetch user data from backend
     api.getCurrentUser()
@@ -166,6 +171,11 @@ export default function App() {
     }
     setAccount(nextAccount);
     setActiveTab('dashboard');
+    setShowLanding(false);
+  };
+
+  const handleGetStarted = () => {
+    setShowLanding(false);
   };
 
   const handleAccountChange = (nextAccount: UserAccount) => {
@@ -191,8 +201,12 @@ export default function App() {
     );
   }
 
+  if (showLanding) {
+    return <LandingPage onGetStarted={handleGetStarted} />;
+  }
+
   if (!account) {
-    return <AuthScreen onComplete={handleAuthComplete} />;
+    return <AuthScreen onComplete={handleAuthComplete} onBack={() => setShowLanding(true)} />;
   }
 
   return (

@@ -31,6 +31,7 @@ const defaultTargets = {
 
 type AuthScreenProps = {
   onComplete: (account: UserAccount, options?: { startDiagnostic?: boolean }) => void;
+  onBack?: () => void;
 };
 
 function AuthLogo() {
@@ -93,7 +94,7 @@ function Field({
   );
 }
 
-export default function AuthScreen({ onComplete }: AuthScreenProps) {
+export default function AuthScreen({ onComplete, onBack }: AuthScreenProps) {
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [step, setStep] = useState(1);
   const [error, setError] = useState('');
@@ -218,6 +219,15 @@ export default function AuthScreen({ onComplete }: AuthScreenProps) {
   return (
     <div className="min-h-dvh bg-[#F3F4F6] flex items-center justify-center px-4 py-10">
       <div className="w-full max-w-[520px]">
+        {onBack && (
+          <button
+            onClick={onBack}
+            className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-[#6D3DF5] hover:text-[#5a2fd9]"
+          >
+            <ChevronLeft className="size-4" />
+            Назад на главную
+          </button>
+        )}
         <AuthLogo />
         <div className="bg-white rounded-[18px] border border-[#DDDDE4] shadow-sm px-5 sm:px-6 py-6">
           {mode === 'register' && step > 1 && (
@@ -256,7 +266,7 @@ export default function AuthScreen({ onComplete }: AuthScreenProps) {
               </button>
               <div className="flex items-center gap-3 my-8 text-sm text-[#9A9AA2]">
                 <div className="h-px bg-[#D8D8DD] flex-1" />
-                или
+                Нет аккаунта?
                 <div className="h-px bg-[#D8D8DD] flex-1" />
               </div>
               <button onClick={() => { setMode('register'); setError(''); }} className="w-full mt-5 text-sm font-semibold text-[#6D3DF5]">
